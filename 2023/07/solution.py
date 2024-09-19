@@ -6,6 +6,29 @@ from dataclasses import dataclass
 #
 #
 #
+class CardBuilder:
+    (_low, _high) = (2, 9)
+
+    @property
+    def joker(self):
+        return 'J'
+
+    def __init__(self, joker=False):
+        high = self._high + 1
+        symbols = f'T{self.joker}QKA' # reversed to make enumeration work
+
+        self.values = { str(x): x for x in range(self._low, high) }
+        self.values.update(map(reversed, enumerate(symbols, high)))
+
+        if joker:
+            self.values[self.joker] = self._low - 1
+
+    def __call__(self, cstring):
+        yield from map(self.values.get, cstring)
+
+#
+#
+#
 @dataclass
 class Hand:
     cards: list
@@ -62,11 +85,12 @@ class HandBuilder:
         '11111': HighCard,
     }
 
-    def __init__(self):
+    def __init__(self, cbuilder):
+        self.cbuilder = cbuilder
         self.fill = max(map(len, self._dtypes))
 
     def __call__(self, cards):
-        counts = cl.Counter(cards)
+        counts = cl.Counter(self.remap(cards))
         encoding = ''.join(str(y) for (_, y) in counts.most_common())
 
         order = encoding
@@ -75,31 +99,35 @@ class HandBuilder:
             order += '0' * short
 
         return self._dtypes.get(encoding)(
-            cards,
+            tuple(self.cbuilder(cards)),
             int(order),
         )
 
-#
-#
-#
-class CardBuilder:
-    _numbers = range(2, 10)
-    _symbols = (
-        'A',
-        'K',
-        'Q',
-        'J',
-        'T',
-    )
+    def remap(self, cards):
+        raise NotImplementedError()
 
-    def __init__(self):
-        self.values = { str(x): x for x in self._numbers }
-        start = max(self._numbers) + 1
-        iterable = enumerate(reversed(self._symbols), start)
-        self.values.update(map(reversed, iterable))
+class StandardHand(HandBuilder):
+    def remap(self, cards):
+        return cards
 
-    def __call__(self, cstring):
-        yield from map(self.values.get, cstring)
+class JokerHand(HandBuilder):
+    def remap(self, cards):
+        if self.cbuilder.joker in cards:
+            counts = cl.Counter(cards)
+            try:
+                c = self.find(counts)
+                cards = cards.replace(self.cbuilder.joker, c)
+            except LookupError:
+                pass
+
+        return cards
+
+    def find(self, counts):
+        for (c, _) in counts.most_common():
+            if c != self.cbuilder.joker:
+                return c
+
+        raise LookupError()
 
 #
 #
@@ -115,13 +143,13 @@ class CamelCard:
 #
 #
 #
-def scanf(fp):
-    cbuilder = CardBuilder()
-    hbuilder = HandBuilder()
+def scanf(args, fp):
+    _Hand = StandardHand if args.version == 1 else JokerHand
+    hbuilder = _Hand(CardBuilder(args.version == 2))
 
     for line in fp:
         (values, bid) = line.strip().split()
-        hand = hbuilder(tuple(cbuilder(values)))
+        hand = hbuilder(values)
 
         yield CamelCard(hand, int(bid))
 
@@ -131,5 +159,5 @@ if __name__ == '__main__':
     arguments.add_argument('--workers', type=int)
     args = arguments.parse_args()
 
-    game = sorted(scanf(sys.stdin))
+    game = sorted(scanf(args, sys.stdin))
     print(sum(x * y.bid for (x, y) in enumerate(game, 1)))
