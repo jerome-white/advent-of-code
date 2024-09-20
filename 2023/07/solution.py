@@ -15,13 +15,19 @@ class CardBuilder:
 
     def __init__(self, joker=False):
         high = self._high + 1
-        symbols = f'T{self.joker}QKA' # reversed to make enumeration work
+        symbols = [ # reversed to make enumeration work
+            'T',
+            'Q',
+            'K',
+            'A',
+        ]
 
         self.values = { str(x): x for x in range(self._low, high) }
-        self.values.update(map(reversed, enumerate(symbols, high)))
-
         if joker:
             self.values[self.joker] = self._low - 1
+        else:
+            symbols.insert(1, self.joker)
+        self.values.update(map(reversed, enumerate(symbols, high)))
 
     def __call__(self, cstring):
         yield from map(self.values.get, cstring)
