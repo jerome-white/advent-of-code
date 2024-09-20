@@ -120,20 +120,12 @@ class JokerHand(HandBuilder):
     def remap(self, cards):
         if self.cbuilder.joker in cards:
             counts = cl.Counter(cards)
-            try:
-                c = self.find(counts)
-                cards = cards.replace(self.cbuilder.joker, c)
-            except LookupError:
-                pass
+            for (c, _) in counts.most_common():
+                if c != self.cbuilder.joker:
+                    cards = cards.replace(self.cbuilder.joker, c)
+                    break
 
         return cards
-
-    def find(self, counts):
-        for (c, _) in counts.most_common():
-            if c != self.cbuilder.joker:
-                return c
-
-        raise LookupError()
 
 #
 #
