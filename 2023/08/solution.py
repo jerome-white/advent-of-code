@@ -1,8 +1,11 @@
 import sys
+import math
 import string
+import logging
 import itertools as it
 from argparse import ArgumentParser
 from dataclasses import dataclass
+from multiprocessing import Pool, Queue
 
 #
 #
@@ -24,38 +27,23 @@ class Node:
 #
 #
 class NetworkState:
-    def __init__(self, network):
+    (_a, _z) = ('A', 'Z')
+
+    def __init__(self, network, a, z):
         self.network = network
-        self.state = list(self.start())
+        self.prefix = self._a * a
+        self.suffix = self._z * z
 
-    def __bool__(self):
-        return not all(map(self.end, self.state))
-
-    def step(self, direction):
-        for (i, s) in enumerate(self.state):
-            self.state[i] = self.network[s][direction]
-
-    def start(self):
-        raise NotImplementedError()
-
-    def end(self):
-        raise NotImplementedError()
+    def __iter__(self):
+        yield from filter(lambda x: x.endswith(self.prefix), self.network)
 
 class StandardState(NetworkState):
-    def start(self):
-        yield from (
-            'AAA',
-        )
-
-    def end(self, key):
-        return key == 'ZZZ'
+    def __init__(self, network):
+        super().__init__(network, 3, 3)
 
 class GhostState(NetworkState):
-    def start(self):
-        yield from filter(lambda x: x.endswith('A'), self.network)
-
-    def end(self, key):
-        return key.endswith('Z')
+    def __init__(self, network):
+        super().__init__(network, 1, 1)
 
 #
 #
@@ -69,23 +57,49 @@ def scanf(fp):
             node = Node(*values)
             yield (key, node)
 
-def walk(network, directions, state):
-    for (i, d) in enumerate(it.cycle(directions), 1):
-        state.step(d)
-        if not state:
-            return i
+def func(incoming, outgoing, network, directions):
+    while True:
+        (loc, suffix) = incoming.get()
+        logging.warning(loc)
+
+        for (i, d) in enumerate(it.cycle(directions), 1):
+            loc = network[loc][d]
+            if loc.endswith(suffix):
+                outgoing.put(i)
+                break
+
 #
 #
 #
 if __name__ == '__main__':
     arguments = ArgumentParser()
     arguments.add_argument('--version', type=int, default=1, choices=(1, 2))
+    arguments.add_argument('--workers', type=int)
     args = arguments.parse_args()
 
     directions = sys.stdin.readline().strip()
     network = dict(scanf(sys.stdin))
 
-    _State = StandardState if args.version == 1 else GhostState
-    state = _State(network)
+    incoming = Queue()
+    outgoing = Queue()
+    initargs = (
+        outgoing,
+        incoming,
+        network,
+        directions,
+    )
 
-    print(walk(network, directions, state))
+    with Pool(args.workers, func, initargs):
+        _State = StandardState if args.version == 1 else GhostState
+        state = _State(network)
+
+        jobs = 0
+        for s in state:
+            outgoing.put((s, state.suffix))
+            jobs += 1
+
+        results = []
+        for _ in range(jobs):
+            results.append(incoming.get())
+
+        print(math.lcm(*results))
