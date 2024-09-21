@@ -154,7 +154,6 @@ def scanf(args, fp):
 if __name__ == '__main__':
     arguments = ArgumentParser()
     arguments.add_argument('--version', type=int, default=1, choices=(1, 2))
-    arguments.add_argument('--workers', type=int)
     args = arguments.parse_args()
 
     game = sorted(scanf(args, sys.stdin))
