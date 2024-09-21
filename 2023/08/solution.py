@@ -4,6 +4,9 @@ import itertools as it
 from argparse import ArgumentParser
 from dataclasses import dataclass
 
+#
+#
+#
 @dataclass
 class Node:
     left: str
@@ -17,8 +20,48 @@ class Node:
 
         raise ValueError(item)
 
+#
+#
+#
+class NetworkState:
+    def __init__(self, network):
+        self.network = network
+        self.state = list(self.start())
+
+    def __bool__(self):
+        return not all(map(self.end, self.state))
+
+    def step(self, direction):
+        for (i, s) in enumerate(self.state):
+            self.state[i] = self.network[s][direction]
+
+    def start(self):
+        raise NotImplementedError()
+
+    def end(self):
+        raise NotImplementedError()
+
+class StandardState(NetworkState):
+    def start(self):
+        yield from (
+            'AAA',
+        )
+
+    def end(self, key):
+        return key == 'ZZZ'
+
+class GhostState(NetworkState):
+    def start(self):
+        yield from filter(lambda x: x.endswith('A'), self.network)
+
+    def end(self, key):
+        return key.endswith('Z')
+
+#
+#
+#
 def scanf(fp):
-    keep = set(string.ascii_uppercase + ' ')
+    keep = set(string.ascii_uppercase + string.digits + ' ')
     for line in fp:
         letters = ''.join(filter(lambda x: x in keep, line))
         if letters:
@@ -26,13 +69,14 @@ def scanf(fp):
             node = Node(*values)
             yield (key, node)
 
-def walk(network, directions, start='AAA', end='ZZZ'):
-    for i in it.cycle(directions):
-        start = network[start][i]
-        yield start
-        if start == end:
-            break
-
+def walk(network, directions, state):
+    for (i, d) in enumerate(it.cycle(directions), 1):
+        state.step(d)
+        if not state:
+            return i
+#
+#
+#
 if __name__ == '__main__':
     arguments = ArgumentParser()
     arguments.add_argument('--version', type=int, default=1, choices=(1, 2))
@@ -41,4 +85,7 @@ if __name__ == '__main__':
     directions = sys.stdin.readline().strip()
     network = dict(scanf(sys.stdin))
 
-    print(sum(1 for _ in walk(network, directions)))
+    _State = StandardState if args.version == 1 else GhostState
+    state = _State(network)
+
+    print(walk(network, directions, state))
