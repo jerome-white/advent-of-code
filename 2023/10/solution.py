@@ -25,8 +25,11 @@ class Tile:
         self.position = position
         self.navigation = args
 
+    def __repr__(self):
+        return self.symbol
+
     def __str__(self):
-        return f'({self.position.row},{self.position.col}) {self.symbol}'
+        return f'({self.position.row},{self.position.col}) {repr(self)}'
 
     def __iter__(self):
         for n in self.navigation:
@@ -56,59 +59,66 @@ class SouthEast(Tile):
     def __init__(self, symbol, position):
         super().__init__(symbol, position, Position(1, 0), Position(0, 1))
 
-class Start(Tile):
-    def __init__(self, symbol, position):
-        directions = list(it.starmap(Position, (
-            (-1, 0),
-            (0, 1),
-            (1, 0),
-            (0, -1),
-        )))
-        super().__init__(symbol, position, *directions)
-
 #
 #
 #
-@dataclass
-class Cell:
-    start: bool
-    tile: Tile
+class Grid:
+    def __init__(self, fp):
+        self.grid = {}
+        self.start = []
 
-    def __bool__(self):
-        return self.start
+        dtypes = {
+            '|': NorthSouth,
+            '-': EastWest,
+            'L': NorthEast,
+            'J': NorthWest,
+            '7': SouthWest,
+            'F': SouthEast,
+        }
 
-def scanf(fp):
-    start = 'S'
-    dtypes = {
-        '|': NorthSouth,
-        '-': EastWest,
-        'L': NorthEast,
-        'J': NorthWest,
-        '7': SouthWest,
-        'F': SouthEast,
-        start: Start,
-    }
-
-    for (r, line) in enumerate(fp):
-        row = line.strip()
-        for (c, cell) in enumerate(row):
-            if cell in dtypes:
-                s = cell == start
+        for (r, line) in enumerate(fp):
+            row = line.strip()
+            for (c, cell) in enumerate(row):
                 p = Position(r, c)
-                _Tile = dtypes[cell]
+                if cell == 'S':
+                    self.start.append(p)
+                elif cell in dtypes:
+                    _Tile = dtypes[cell]
+                    self.grid[p] = _Tile(cell, p)
 
-                yield Cell(s, _Tile(cell, p))
+    def __iter__(self):
+        compass = (
+            ('|F7', -1,  0),
+            ('J7-',  0,  1),
+            ('|JL',  1,  0),
+            ('-LF',  0, -1),
+        )
 
-def walk(grid, position, visited=None, distance=1):
-    if visited is None:
-        visited = set()
+        for (i, *j) in compass:
+            name = set(i)
+            position = Position(*j)
+            for s in self.start:
+                pos = s + position
+                tile = self.grid.get(pos)
+                if tile is not None and repr(tile) in name:
+                    yield pos
 
-    if position in grid and position not in visited:
-        yield (position, distance)
-        distance += 1
-        visited.add(position)
-        for p in grid.get(position):
-            yield from walk(grid, p, visited, distance)
+    def __getitem__(self, item):
+        return self.grid[item]
+
+    def __contains__(self, item):
+        return item in self.grid
+
+    def walk(self, position, visited=None, distance=1):
+        if visited is None:
+            visited = set()
+
+        if position in self and position not in visited:
+            yield (position, distance)
+            distance += 1
+            visited.add(position)
+            for p in self[position]:
+                yield from self.walk(p, visited, distance)
 
 #
 #
@@ -123,20 +133,13 @@ if __name__ == '__main__':
     if args.recursive_limit:
         sys.setrecursionlimit(args.recursive_limit)
 
-    grid = {}
-    starts = []
-    for c in scanf(sys.stdin):
-        if c:
-            starts.append(c.tile)
-        else:
-            grid[c.tile.position] = c.tile
-
+    grid = Grid(sys.stdin)
     distances = {}
-    for S in starts:
-        for p in S:
-            logging.warning(p)
-            for (t, d) in walk(grid, p):
-                logging.debug(f'\t {grid[t]}: {d}')
-                distances[t] = min(distances[t], d) if t in distances else d
+
+    for p in grid:
+        logging.warning(p)
+        for (t, d) in grid.walk(p):
+            logging.debug('%s %s', grid[t], d)
+            distances[t] = min(distances[t], d) if t in distances else d
 
     print(max(distances.values()))
