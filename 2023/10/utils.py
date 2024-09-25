@@ -107,7 +107,7 @@ class Grid:
         raise IndexError()
 
     @ft.singledispatchmethod
-    def _starts(self, tile, position):
+    def _starts(self, tile, position): # https://stackoverflow.com/a/61496399
         return
         yield
 
