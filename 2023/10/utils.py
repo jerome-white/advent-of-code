@@ -52,7 +52,7 @@ class SouthEast(Tile):
     def __init__(self, symbol):
         super().__init__(symbol, Position(1, 0), Position(0, 1))
 
-class StationaryTile(Tile):
+class GroundTile(Tile):
     pass
 
 class StartTile(Tile):
@@ -84,7 +84,7 @@ class Grid:
         for line in fp:
             row = []
             for r in line.strip():
-                tile = self._dtypes.get(r, StationaryTile)
+                tile = self._dtypes.get(r, GroundTile)
                 row.append(tile(r))
             self.grid.append(row)
 
