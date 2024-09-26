@@ -17,7 +17,6 @@ class PipeGrid(Grid):
     def walk(self, position, visited, distance=1):
         if position not in visited:
             visited.add(position)
-
             try:
                 tile = self[position]
             except IndexError:
@@ -25,7 +24,7 @@ class PipeGrid(Grid):
             yield (tile, distance)
 
             distance += 1
-            for p in tile.explore(position):
+            for p in tile(position):
                 yield from self.walk(p, visited, distance)
 
 #

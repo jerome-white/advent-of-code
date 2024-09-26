@@ -24,7 +24,7 @@ class Tile:
     def __str__(self):
         return self.symbol
 
-    def explore(self, source):
+    def __call__(self, source):
         for n in self.navigation:
             yield source + n
 
