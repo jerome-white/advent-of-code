@@ -5,6 +5,8 @@ import collections as cl
 from argparse import ArgumentParser
 from dataclasses import dataclass
 
+import networkx as nx
+
 from utils import (
     Grid,
     Position,
@@ -24,15 +26,14 @@ if __name__ == '__main__':
         sys.setrecursionlimit(args.recursive_limit)
 
     grid = Grid(sys.stdin)
-    distances = {}
+    G = nx.Graph()
+    distance = None
 
-    for p in grid.sources():
-        logging.warning(p)
-        for v in grid.walk(p):
-            logging.debug('%s %s', v.tile, v.distance)
-            if v.tile in distances:
-                distances[v.tile] = min(distances[v.tile], v.distance)
-            else:
-                distances[v.tile] = v.distance
+    for (u, v) in grid.starts():
+        G.add_edges_from(grid.walk(u, v))
+        paths = nx.shortest_path_length(G, source=u)
+        furthest = max(paths.values())
+        if distance is None or distance < furthest:
+            distance = furthest
 
-    print(max(distances.values()))
+    print(distance)
