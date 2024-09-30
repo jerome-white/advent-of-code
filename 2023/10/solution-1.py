@@ -13,23 +13,6 @@ from utils import (
 #
 #
 #
-class PipeGrid(Grid):
-    def walk(self, position, visited, distance=1):
-        if position not in visited:
-            visited.add(position)
-            try:
-                tile = self[position]
-            except IndexError:
-                return
-            yield (tile, distance)
-
-            distance += 1
-            for p in tile(position):
-                yield from self.walk(p, visited, distance)
-
-#
-#
-#
 if __name__ == '__main__':
     arguments = ArgumentParser()
     arguments.add_argument('--version', type=int, default=1, choices=(1, 2))
@@ -40,15 +23,16 @@ if __name__ == '__main__':
     if args.recursive_limit:
         sys.setrecursionlimit(args.recursive_limit)
 
-    grid = PipeGrid(sys.stdin)
-    visited = set()
+    grid = Grid(sys.stdin)
     distances = {}
 
     for p in grid.sources():
         logging.warning(p)
-        for (t, d) in grid.walk(p, visited):
-            logging.debug('%s %s', t, d)
-            distances[t] = min(distances[t], d) if t in distances else d
-        visited.clear()
+        for v in grid.walk(p):
+            logging.debug('%s %s', v.tile, v.distance)
+            if v.tile in distances:
+                distances[v.tile] = min(distances[v.tile], v.distance)
+            else:
+                distances[v.tile] = v.distance
 
     print(max(distances.values()))

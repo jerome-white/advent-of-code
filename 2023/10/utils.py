@@ -1,5 +1,4 @@
 import itertools as it
-import functools as ft
 from dataclasses import dataclass
 
 #
@@ -9,6 +8,12 @@ from dataclasses import dataclass
 class Position:
     row: int
     col: int
+
+    def __iter__(self):
+        yield from (
+            self.row,
+            self.col,
+        )
 
     def __add__(self, other):
         return type(self)(self.row + other.row, self.col + other.col)
@@ -61,6 +66,13 @@ class StartTile(Tile):
 #
 #
 #
+
+@dataclass(frozen=True)
+class Visit:
+    tile: Tile
+    position: Position
+    distance: int
+
 class Grid:
     _dtypes = {
         '|': NorthSouth,
@@ -106,22 +118,34 @@ class Grid:
 
         raise IndexError()
 
-    @ft.singledispatchmethod
-    def _starts(self, tile, position): # https://stackoverflow.com/a/61496399
-        return
-        yield
-
-    @_starts.register
-    def _(self, tile: StartTile, position):
-        for (k, v) in self.compass.items():
-            pos = position + v
-            try:
-                tile = self[pos]
-            except IndexError:
-                continue
-            if str(tile) in k:
-                yield pos
-
-    def sources(self):
+    def select(self, dtype):
         for (p, t) in self:
-            yield from self._starts(t, p)
+            if isinstance(t, dtype):
+                yield (p, t)
+
+    def starts(self):
+        for (p, t) in self.select(StartTile):
+            for (k, v) in self.compass.items():
+                position = p + v
+                try:
+                    tile = self[position]
+                except IndexError:
+                    continue
+                if str(tile) in k:
+                    yield position
+
+    def walk(self, position, visited=None, distance=1):
+        if visited is None:
+            visited = set()
+
+        if position not in visited:
+            visited.add(position)
+            try:
+                tile = self[position]
+            except IndexError:
+                return
+            yield Visit(tile, position, distance)
+
+            distance += 1
+            for p in tile(position):
+                yield from self.walk(p, visited, distance)
