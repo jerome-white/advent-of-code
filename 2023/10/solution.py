@@ -26,6 +26,28 @@ class PipeMaze:
                 outgoing.put(i)
             outgoing.put(None)
 
+    def solve(self, args):
+        incoming = Queue()
+        outgoing = Queue()
+        initargs = (
+            outgoing,
+            incoming,
+            args,
+        )
+
+        with Pool(args.workers, self, initargs):
+            jobs = 0
+            for u_v in self.grid.starts():
+                outgoing.put(u_v)
+                jobs += 1
+
+            while jobs:
+                result = incoming.get()
+                if result is None:
+                    jobs -= 1
+                else:
+                    yield result
+
 class PathLengthMaze(PipeMaze):
     def handle(self, u, v):
         G = nx.Graph()
@@ -54,27 +76,6 @@ class EnclosedMaze(PipeMaze):
 #
 #
 #
-def solve(args, grid, func):
-    incoming = Queue()
-    outgoing = Queue()
-    initargs = (
-        outgoing,
-        incoming,
-        args,
-    )
-
-    with Pool(args.workers, func, initargs):
-        jobs = 0
-        for u_v in grid.starts():
-            outgoing.put(u_v)
-            jobs += 1
-
-        while jobs:
-            result = incoming.get()
-            if result is None:
-                jobs -= 1
-            else:
-                yield result
 
 if __name__ == '__main__':
     arguments = ArgumentParser()
@@ -83,8 +84,6 @@ if __name__ == '__main__':
     arguments.add_argument('--workers', type=int)
     args = arguments.parse_args()
 
-    grid = Grid(sys.stdin)
     _Maze = PathLengthMaze if args.version == 1 else EnclosedMaze
-    maze = _Maze(grid)
-
-    print(maze.collect(solve(args, grid, maze)))
+    maze = _Maze(Grid(sys.stdin))
+    print(maze.collect(maze.solve(args)))
