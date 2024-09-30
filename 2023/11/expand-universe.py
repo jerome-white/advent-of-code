@@ -1,17 +1,37 @@
 import sys
 
+class Universe:
+    _empty = '.'
+
+    def __init__(self, fp):
+        self.sky = [ list(x.strip()) for x in fp ]
+        (self.nrow, self.ncol) = (len(self.sky), len(self.sky[0]))
+
+    def __str__(self):
+        return '\n'.join(''.join(x) for x in self.sky)
+
+    def rows(self):
+        r = 0
+        while r < self.nrow:
+            row = self.sky[r]
+            if all(x == self._empty for x in row):
+                row_ = [ self._empty ] * self.nrow
+                self.sky.insert(r, row_)
+                r += 2
+            else:
+                r += 1
+
+    def cols(self):
+        for i in range(self.ncol - 1, -1, -1):
+            if all(self.sky[x][i] == self._empty for x in range(self.nrow)):
+                for r in self.sky:
+                    r.insert(i, '.')
+
+    def expand(self):
+        self.rows()
+        self.cols()
+
 if __name__ == '__main__':
-    universe = []
-    for line in sys.stdin:
-        row = list(line.strip())
-        universe.append(row)
-        if all(x == '.' for x in row):
-            universe.append(row.copy())
-
-    (nrows, ncols) = (len(universe), len(universe[0]))
-    for i in range(ncols - 1, -1, -1):
-        if all(universe[x][i] == '.' for x in range(nrows)):
-            for r in universe:
-                r.insert(i, '.')
-
-    print(*(''.join(x) for x in universe), sep='\n')
+    universe = Universe(sys.stdin)
+    universe.expand()
+    print(universe)
