@@ -91,61 +91,39 @@ class Grid:
     )
 
     def __init__(self, fp):
-        self.grid = []
+        self.grid = {}
 
-        for line in fp:
-            row = []
-            for r in line.strip():
-                tile = self._dtypes.get(r, GroundTile)
-                row.append(tile(r))
-            self.grid.append(row)
+        for (r, row) in enumerate(fp):
+            for (c, cell) in enumerate(row.strip()):
+                pos = Position(r, c)
+                tile = self._dtypes.get(cell, GroundTile)
+                self.grid[pos] = tile(cell)
 
-        self.shape = (len(self.grid), len(self.grid[0]))
         self.compass = {
             frozenset(x): Position(*y) for (x, *y) in self._compass
         }
 
     def __iter__(self):
-        for (r, row) in enumerate(self.grid):
-            for (c, tile) in enumerate(row):
-                p = Position(r, c)
-                yield (p, tile)
-
-    def __getitem__(self, position):
-        (r, c) = (position.row, position.col)
-        if all(0 <= x < y for (x, y) in zip((r, c), self.shape)):
-            return self.grid[r][c]
-
-        raise IndexError()
-
-    def select(self, dtype):
-        for (p, t) in self:
-            if isinstance(t, dtype):
-                yield (p, t)
+        yield from self.grid.items()
 
     def starts(self):
-        for (p, t) in self.select(StartTile):
-            for (k, v) in self.compass.items():
-                position = p + v
-                try:
-                    tile = self[position]
-                except IndexError:
-                    continue
-                if str(tile) in k:
-                    yield position
+        for (u, src) in self:
+            if isinstance(src, StartTile):
+                for (n, pos) in self.compass.items():
+                    v = u + pos
+                    if v in self.grid:
+                        dst = self.grid[v]
+                        if str(dst) in n:
+                            yield (u, v)
 
-    def walk(self, position, visited=None, distance=1):
+    def walk(self, u, v, visited=None):
         if visited is None:
             visited = set()
 
-        if position not in visited:
-            visited.add(position)
-            try:
-                tile = self[position]
-            except IndexError:
-                return
-            yield Visit(tile, position, distance)
-
-            distance += 1
-            for p in tile(position):
-                yield from self.walk(p, visited, distance)
+        if u in self.grid and v not in visited:
+            visited.add(v)
+            yield (u, v)
+            tile = self.grid[v]
+            for w in tile(v):
+                if w != u:
+                    yield from self.walk(v, w, visited)
