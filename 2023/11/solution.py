@@ -58,7 +58,6 @@ def shortest_paths(args, fp):
 
 if __name__ == '__main__':
     arguments = ArgumentParser()
-    arguments.add_argument('--version', type=int, default=1, choices=(1, 2))
     arguments.add_argument('--workers', type=int)
     args = arguments.parse_args()
 

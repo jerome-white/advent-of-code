@@ -1,6 +1,5 @@
 import sys
-import logging
-import itertools as it
+from argparse import ArgumentParser
 
 #
 #
@@ -20,9 +19,9 @@ class Universe:
     def __str__(self):
         return '\n'.join(''.join(x) for x in self.sky)
 
-    def expand(self):
+    def expand(self, factor=1):
         for E in (RowExpander, ColumnExpander):
-            expander = E(self)
+            expander = E(self, factor)
             expander()
 
 #
@@ -31,17 +30,18 @@ class Universe:
 class UniverseExpander:
     _empty = '.'
 
-    def __init__(self, universe):
+    def __init__(self, universe, expansion):
         self.universe = universe
+        self.expansion = expansion
 
     def __call__(self):
         i = 0
         while self.proceed(i):
             if all(self.empty(i)):
-                self.insert(i)
-                i += 2
-            else:
-                i += 1
+                for _ in range(self.expansion - 1):
+                    self.insert(i)
+                i += self.expansion
+            i += 1
 
     def proceed(self, loc):
         raise NotImplementedError()
@@ -79,6 +79,16 @@ class ColumnExpander(UniverseExpander):
 #
 #
 if __name__ == '__main__':
+    arguments = ArgumentParser()
+    arguments.add_argument('--expansion', type=int)
+    arguments.add_argument('--version', type=int, default=1, choices=(1, 2))
+    args = arguments.parse_args()
+
+    if args.expansion is None:
+        expansion = 2 if args.version == 1 else int(1e6)
+    else:
+        expansion = args.expansion
+
     universe = Universe(sys.stdin)
-    universe.expand()
+    universe.expand(expansion)
     print(universe)
