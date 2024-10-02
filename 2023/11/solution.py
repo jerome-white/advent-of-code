@@ -1,7 +1,7 @@
 import sys
 import logging
-import functools as ft
 import itertools as it
+import functools as ft
 import collections as cl
 from argparse import ArgumentParser
 from multiprocessing import Pool
@@ -14,25 +14,6 @@ class Universe:
     _empty = '.'
     _galaxy = '#'
 
-    @ft.cached_property
-    def dark_r(self):
-        def dark():
-            for (r, row) in enumerate(self.grid):
-                if all(x == self._empty for x in row):
-                    yield r
-
-        return tuple(dark())
-
-    @ft.cached_property
-    def dark_c(self):
-        def dark():
-            (nrow, ncol) = (len(self.grid), len(self.grid[0]))
-            for c in range(ncol):
-                if all(self.grid[x][c] == self._empty for x in range(nrow)):
-                    yield c
-
-        return tuple(dark())
-
     def __init__(self, fp):
         self.grid = [ x.strip() for x in fp ]
 
@@ -42,32 +23,46 @@ class Universe:
                 if cell == self._galaxy:
                     yield Coordinate(r, c)
 
+    def dark_r(self):
+        for (r, row) in enumerate(self.grid):
+            if all(x == self._empty for x in row):
+                yield r
+
+    def dark_c(self):
+        (nrow, ncol) = (len(self.grid), len(self.grid[0]))
+        for c in range(ncol):
+            if all(self.grid[x][c] == self._empty for x in range(nrow)):
+                yield c
+
 #
 #
 #
+@ft.cache
+def warp(u, v, darkness, expansion):
+    return sum(u < x < v for x in darkness) * (expansion - 1)
+
 def func(args):
     (u, v, dark, expansion) = args
 
     distance = cityblock(u, v)
     for (d, *e) in zip(dark, u, v):
-        (l, r) = sorted(e)
-        distance += sum(l < x < r for x in d) * expansion
+        edge = sorted(e)
+        distance += warp(*edge, d, expansion)
     logging.warning('%s %s: %d', u, v, distance)
 
     return distance
 
 def each(args, fp):
     if args.expansion is None:
-        expansion = 2 if args.version == 1 else int(1e6)
+        expansion = 2 if args.version == 1 else 1_000_000
     else:
         expansion = args.expansion
-    expansion -= 1
 
     universe = Universe(fp)
-    dark = (
-        universe.dark_r,
-        universe.dark_c,
-    )
+    dark = Coordinate(*(map(tuple, (
+        universe.dark_r(),
+        universe.dark_c(),
+    ))))
 
     for e in it.combinations(universe, r=2):
         yield (*e, dark, expansion)
