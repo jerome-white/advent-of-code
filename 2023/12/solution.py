@@ -37,7 +37,7 @@ class ConditionRecord:
 
         return type(self)(springs, tuple(layout))
 
-def each(fp):
+def records(fp):
     for line in fp:
         (springs, layout) = line.strip().split()
         layout = tuple(map(int, layout.split(',')))
@@ -45,5 +45,5 @@ def each(fp):
         yield ConditionRecord(springs, layout)
 
 if __name__ == '__main__':
-    for cr in each(sys.stdin):
-        print(cr, cr.simplify(), sep='\n')
+    for r in records(sys.stdin):
+        print(r, r.simplify(), sep='\n')
