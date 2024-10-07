@@ -1,77 +1,59 @@
 import re
 import sys
 import logging
+import itertools as it
 import collections as cl
-from dataclasses import dataclass
+from argparse import ArgumentParser
+from multiprocessing import Pool
 
-@dataclass
-class ConditionRecord:
-    springs: str
-    layout: tuple
+ConditionRecord = cl.namedtuple('ConditionRecord', 'springs, layout')
 
-    def simplify(self):
-        (temp, pound) = ('-', '#')
-        assert temp not in self.springs
-        layout = []
-        counts = cl.Counter(self.layout)
+def accept(springs, target):
+    source = map(len, filter(None, springs.split('.')))
+    return all(x == y for (x, y) in it.zip_longest(source, target))
 
-        springs = self.springs
-        for (k, v) in counts.items():
-            # gpt-4o prompt:
-            #  Write a regular expression using Python's re library
-            #  that does the following:
-            #  * match "#" i number of times
-            #  * matches "?" or "." or the beginning of the string on
-            #    the left side
-            #  * matches "?" or "." or the end of the string on the
-            #    right side
-            #  Make sure the pattern avoids look-behind errors
-            regex = f'(?:^|[?.]){pound}{{{k}}}(?:[?.]|$)'
+def valid(springs, target):
+    # a = cl.Counter(target)
+    # b = cl.Counter(map(len, re.findall('#+', springs)))
 
-            res = list(re.finditer(regex, springs))
-            if len(res) == v:
-                for r in res:
-                    (left, right) = r.span()
-                    middle = (springs[left:right]
-                              .replace(pound, temp)
-                              .replace('?', '.'))
-                    springs = substitute(springs, middle, left, right)
-            else:
-                layout.extend(k for _ in range(v))
-        springs = springs.replace(temp, pound)
+    # upper = max(a)
+    # for (k, v) in b.items():
+    #     if k in a and v > a[k] or k > upper:
+    #         return False
 
-        return type(self)(springs, tuple(layout))
+    return True
 
-class ArrangementIterator:
-    def __init__(self, record):
-        self.record = record
-        self.counts = cl.Counter(self.record.layout)
+def gather(springs, target, layout=None, start=0):
+    if layout is None:
+        layout = target
 
-    def __str__(self):
-        return str(self.record)
-
-    def __iter__(self):
-        record = self.record.simplify()
-        yield from self(record.springs, record.layout)
-
-    def __call__(self, springs, layout):
+    if valid(springs, target):
         if not layout:
             s = springs.replace('?', '.')
-            if self.accept(s):
+            if accept(s, target):
                 yield s
         else:
             (head, *tail) = layout
             pounds = '#' * head
-            for m in re.finditer(f'[^.]{{{head}}}', springs):
-                s = substitute(springs, pounds, *m.span())
-                yield from self(s, tail)
+            stop = start + len(springs)
+            for i in range(start, stop):
+                j = i + head
+                view = springs[i:j]
+                if len(view) != j - i:
+                    break
+                if not any(x == '.' for x in view):
+                    s = f'{springs[:i]}{pounds}{springs[j:]}'
+                    yield from gather(s, target, tail, i)
 
-    def accept(self, springs):
-        counts = cl.Counter(map(len, filter(None, springs.split('.'))))
-        return counts == self.counts
+def func(args):
+    arrangements = set(gather(*args))
+    n = len(arrangements)
 
-def substitute(word, replacement, left, right):
-    return f'{word[:left]}{replacement}{word[right:]}'
+    logging.error('%s %d', args, n)
+    for a in arrangements:
+        logging.warning(a)
+
+    return n
 
 def records(fp):
     for line in fp:
@@ -80,7 +62,11 @@ def records(fp):
         yield ConditionRecord(springs, layout)
 
 if __name__ == '__main__':
-    for r in records(sys.stdin):
-        aitr = ArrangementIterator(r)
-        arrangements = set(aitr)
-        logging.critical(f'{r} {len(arrangements)}')
+    arguments = ArgumentParser()
+    arguments.add_argument('--version', type=int, default=1, choices=(1, 2))
+    arguments.add_argument('--workers', type=int)
+    args = arguments.parse_args()
+
+    with Pool(args.workers) as pool:
+        counts = pool.imap_unordered(func, records(sys.stdin))
+        print(sum(counts))
