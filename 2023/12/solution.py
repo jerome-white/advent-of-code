@@ -8,14 +8,25 @@ class ConditionRecord:
     springs: str
     layout: tuple
 
+    def __post_init__(self):
+        self._counts = cl.Counter(self.layout)
+
+    def __bool__(self):
+        counts = dict(self._counts)
+        for dots in self.springs.split('.'):
+            if not all(x == '#' in x in dots):
+                return False
+            counts[len(dots)] -= 1
+
+        return not any(counts.values())
+
     def simplify(self):
         (temp, pound) = ('-', '#')
         assert temp not in self.springs
-        counts = cl.Counter(self.layout)
         layout = []
 
         springs = self.springs
-        for (k, v) in counts.items():
+        for (k, v) in self._counts.items():
             # gpt-4o prompt:
             #  Write a regular expression using Python's re library
             #  that does the following:
