@@ -13,12 +13,13 @@ def accept(springs, target):
     return all(x == y for (x, y) in it.zip_longest(source, target))
 
 def valid(springs, target):
-    # a = cl.Counter(target)
-    # b = cl.Counter(map(len, re.findall('#+', springs)))
+    # src = cl.Counter(target)
+    # dst = cl.Counter(map(len, re.findall('#+', springs)))
+    # # logging.critical(f'{src} {dst}')
 
-    # upper = max(a)
-    # for (k, v) in b.items():
-    #     if k in a and v > a[k] or k > upper:
+    # upper = max(src)
+    # for (k, v) in dst.items():
+    #     if k in src and v > src[k] or k > upper:
     #         return False
 
     return True
