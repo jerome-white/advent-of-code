@@ -56,18 +56,28 @@ def func(args):
 
     return n
 
-def records(fp):
+def records(fp, args):
+    if args.folds is None:
+        replicas = 1 if args.version == 1 else 5
+    else:
+        replicas = args.folds
+
     for line in fp:
         (springs, layout) = line.strip().split()
         layout = tuple(map(int, layout.split(',')))
-        yield ConditionRecord(springs, layout)
+        if replicas > 1:
+            springs = f'{springs}?' * replicas
+            layout *= replicas
+
+        yield ConditionRecord(springs, tuple(layout))
 
 if __name__ == '__main__':
     arguments = ArgumentParser()
+    arguments.add_argument('--folds', type=int)
     arguments.add_argument('--version', type=int, default=1, choices=(1, 2))
     arguments.add_argument('--workers', type=int)
     args = arguments.parse_args()
 
     with Pool(args.workers) as pool:
-        counts = pool.imap_unordered(func, records(sys.stdin))
+        counts = pool.imap_unordered(func, records(sys.stdin, args))
         print(sum(counts))
