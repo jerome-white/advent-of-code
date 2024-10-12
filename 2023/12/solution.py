@@ -2,59 +2,88 @@ import re
 import sys
 import logging
 import itertools as it
+import functools as ft
 import collections as cl
 from argparse import ArgumentParser
+from dataclasses import dataclass
 from multiprocessing import Pool
 
 ConditionRecord = cl.namedtuple('ConditionRecord', 'springs, layout')
 
-def accept(springs, target):
-    source = map(len, filter(None, springs.split('.')))
-    return all(x == y for (x, y) in it.zip_longest(source, target))
+@dataclass
+class Span:
+    span: str
+    index: int
 
-def valid(springs, target):
-    # src = cl.Counter(target)
-    # dst = cl.Counter(map(len, re.findall('#+', springs)))
-    # # logging.critical(f'{src} {dst}')
+    def __init__(self, window, index):
+        self.span = ''.join(window)
+        self.index = index
 
-    # upper = max(src)
-    # for (k, v) in dst.items():
-    #     if k in src and v > src[k] or k > upper:
-    #         return False
+    def __len__(self):
+        return len(self.span)
 
-    return True
+    def completely(self, c):
+        return all(x == c for x in self.span)
 
-def gather(springs, target, layout=None, start=0):
-    if layout is None:
-        layout = target
-
-    if valid(springs, target):
-        if not layout:
-            s = springs.replace('?', '.')
-            if accept(s, target):
-                yield s
+def spans(springs):
+    window = []
+    for (i, s) in enumerate(springs):
+        if s == '.':
+            if window:
+                yield Span(window, i)
+                window.clear()
         else:
-            (head, *tail) = layout
-            pounds = '#' * head
-            stop = start + len(springs)
-            for i in range(start, stop):
-                j = i + head
-                view = springs[i:j]
-                if len(view) != j - i:
-                    break
-                if not any(x == '.' for x in view):
-                    s = f'{springs[:i]}{pounds}{springs[j:]}'
-                    yield from gather(s, target, tail, i)
+            window.append(s)
+
+    if window:
+        yield Span(window, len(springs))
+
+def forward(springs, start):
+    for (i, s) in enumerate(it.islice(springs, start, None), start):
+        if s != '.':
+            return springs[i:]
+
+    return ''
+
+def align(springs, target):
+    pivot = None
+
+    for ((i, t), s) in zip(enumerate(target, 1), spans(springs)):
+        if not s.completely('#'):
+            break
+        if len(s) != t:
+            raise ValueError()
+        pivot = (i, s.index)
+
+    if pivot is not None:
+        (i, s) = pivot
+        target = target[i:]
+        springs = forward(springs, s)
+
+    return (springs, target)
+
+@ft.cache
+def gather(springs, target):
+    try:
+        (springs, target) = align(springs, target)
+    except ValueError:
+        return 0
+
+    if not target:
+        return not springs.count('#')
+
+    configs = 0
+    if springs.find('?') >= 0:
+        for i in ('#', '.'):
+            s = springs.replace('?', i, 1)
+            configs += gather(s, target)
+
+    return configs
 
 def func(args):
-    arrangements = set(gather(*args))
-    n = len(arrangements)
-
-    logging.error('%s %d', args, n)
-    for a in arrangements:
-        logging.warning(a)
-
-    return n
+    arrangements = gather(*args)
+    logging.warning('%s %d', args, arrangements)
+    return arrangements
 
 def records(fp, args):
     if args.folds is None:
@@ -66,10 +95,10 @@ def records(fp, args):
         (springs, layout) = line.strip().split()
         layout = tuple(map(int, layout.split(',')))
         if replicas > 1:
-            springs = f'{springs}?' * replicas
+            springs = '?'.join(it.repeat(springs, replicas))
             layout *= replicas
 
-        yield ConditionRecord(springs, tuple(layout))
+        yield ConditionRecord(springs, layout)
 
 if __name__ == '__main__':
     arguments = ArgumentParser()
