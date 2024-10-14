@@ -7,7 +7,29 @@ from argparse import ArgumentParser
 from dataclasses import dataclass
 from multiprocessing import Pool
 
-ConditionRecord = cl.namedtuple('ConditionRecord', 'springs, layout')
+@dataclass(frozen=True)
+class ConditionRecord:
+    springs: str
+    layout: tuple
+
+    def align(self):
+        pivot = None
+
+        for ((i, l), s) in zip(enumerate(self.layout, 1), spans(self.springs)):
+            if not s.completely('#'):
+                break
+            if len(s) != l:
+                raise ValueError()
+            pivot = (i, s.index)
+
+        if pivot is None:
+            return self
+
+        (i, s) = pivot
+        layout = self.layout[i:]
+        springs = forward(self.springs, s)
+
+        return type(self)(springs, layout)
 
 @dataclass
 class Span:
@@ -44,43 +66,27 @@ def forward(springs, start):
 
     return ''
 
-def align(springs, target):
-    pivot = None
-
-    for ((i, t), s) in zip(enumerate(target, 1), spans(springs)):
-        if not s.completely('#'):
-            break
-        if len(s) != t:
-            raise ValueError()
-        pivot = (i, s.index)
-
-    if pivot is not None:
-        (i, s) = pivot
-        target = target[i:]
-        springs = forward(springs, s)
-
-    return (springs, target)
-
 @ft.cache
-def gather(springs, target):
+def gather(crecord):
     try:
-        (springs, target) = align(springs, target)
+        crecord = crecord.align()
     except ValueError:
         return 0
 
-    if not target:
-        return not springs.count('#')
+    if not crecord.layout:
+        return not crecord.springs.count('#')
 
     configs = 0
-    if springs.find('?') >= 0:
+    if crecord.springs.find('?') >= 0:
         for i in ('#', '.'):
-            s = springs.replace('?', i, 1)
-            configs += gather(s, target)
+            s = crecord.springs.replace('?', i, 1)
+            c = ConditionRecord(s, crecord.layout)
+            configs += gather(c)
 
     return configs
 
 def func(args):
-    arrangements = gather(*args)
+    arrangements = gather(args)
     logging.warning('%s %d', args, arrangements)
     return arrangements
 
