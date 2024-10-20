@@ -1,8 +1,6 @@
 import sys
 import logging
-import operator as op
 import itertools as it
-import functools as ft
 import collections as cl
 from dataclasses import dataclass
 from argparse import ArgumentParser
@@ -36,7 +34,24 @@ class RowIterator(PuzzleIterator):
 class ColumnIterator(PuzzleIterator):
     def __iter__(self):
         yield from map(''.join, zip(*self.puzzle))
-        
+
+#
+#
+#
+class Reflection:
+    def __init__(self, smudges):
+        self.smudges = smudges
+
+    def __call__(self, left, right):
+        s = 0
+        for view in zip(left, right):
+            for (l, r) in zip(*view):
+                s += l != r
+                if s > self.smudges:
+                    return False
+
+        return s == self.smudges
+
 #
 #
 #
@@ -45,32 +60,33 @@ def walk(puzzle):
     for p in zip(*iterable):
         yield tuple(it.starmap(PuzzlePiece, p))
 
-def reflect(puzzle):
+def mirror(puzzle, reflection):
     lhs = cl.deque()
 
     for (left, right) in walk(puzzle):
         lhs.appendleft(left.piece)
-        if left == right:
-            rhs = it.islice(puzzle, right.index, None)
-            if all(x == y for (x, y) in zip(lhs, rhs)):
-                return right.index
+        rhs = it.islice(puzzle, right.index, None)
+        if reflection(lhs, rhs):
+            return right.index
 
-    raise ValueError()            
-    
-def func(incoming, outgoing):
+    raise ValueError()
+
+def func(incoming, outgoing, args):
     _parsers = {
         'r': RowIterator,
         'c': ColumnIterator,
     }
+    smudges = 0 if args.version == 1 else 1
+    reflection = Reflection(smudges)
 
     while True:
         text = incoming.get()
 
-        counts = cl.Counter()                
+        counts = cl.Counter()
         for (axis, parse) in _parsers.items():
             view = list(parse(text))
             try:
-                c = reflect(view)
+                c = mirror(view, reflection)
             except ValueError:
                 logging.error(axis)
                 continue
@@ -87,7 +103,6 @@ def scanf(fp):
         else:
             yield text
             text = []
-
     if text:
         yield text
 
@@ -102,6 +117,7 @@ if __name__ == '__main__':
     initargs = (
         outgoing,
         incoming,
+        args,
     )
 
     with Pool(args.workers, func, initargs):
