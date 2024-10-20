@@ -4,8 +4,20 @@ import operator as op
 import itertools as it
 import functools as ft
 import collections as cl
+from dataclasses import dataclass
 from argparse import ArgumentParser
 from multiprocessing import Pool, Queue
+
+#
+#
+#
+@dataclass
+class PuzzlePiece:
+    index: int
+    piece: str
+
+    def __eq__(self, other):
+        return self.piece == other.piece
 
 #
 #
@@ -24,25 +36,29 @@ class RowIterator(PuzzleIterator):
 class ColumnIterator(PuzzleIterator):
     def __iter__(self):
         yield from map(''.join, zip(*self.puzzle))
+        
+#
+#
+#
+def walk(puzzle):
+    iterable = (enumerate(it.islice(puzzle, x, None), x) for x in range(2))
+    for p in zip(*iterable):
+        yield tuple(it.starmap(PuzzlePiece, p))
 
-#
-#
-#
-def reflection(puzzle):
+def reflect(puzzle):
     lhs = cl.deque()
-    walker = (enumerate(it.islice(puzzle, x, None), x) for x in range(2))
-    
-    for ((i, l), (j, r)) in zip(*walker):
-        lhs.appendleft(l)
-        if l == r:
-            rhs = it.islice(puzzle, j, None)
+
+    for (left, right) in walk(puzzle):
+        lhs.appendleft(left.piece)
+        if left == right:
+            rhs = it.islice(puzzle, right.index, None)
             if all(x == y for (x, y) in zip(lhs, rhs)):
-                return j
+                return right.index
 
     raise ValueError()            
     
 def func(incoming, outgoing):
-    parsers = {
+    _parsers = {
         'r': RowIterator,
         'c': ColumnIterator,
     }
@@ -51,13 +67,14 @@ def func(incoming, outgoing):
         text = incoming.get()
 
         counts = cl.Counter()                
-        for (i, j) in parsers.items():
+        for (axis, parse) in _parsers.items():
+            view = list(parse(text))
             try:
-                n = reflection(list(j(text)))
+                c = reflect(view)
             except ValueError:
-                logging.error(i)
+                logging.error(axis)
                 continue
-            counts[i] += n
+            counts[axis] += c
 
         outgoing.put(counts)
 
