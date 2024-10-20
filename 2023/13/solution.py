@@ -1,141 +1,96 @@
 import sys
 import logging
-import operator as op
 import itertools as it
-import functools as ft
 import collections as cl
+from dataclasses import dataclass
 from argparse import ArgumentParser
 from multiprocessing import Pool, Queue
 
 #
 #
 #
-class PuzzleParser:
-    def __init__(self, start=1):
-        self.start = start
+@dataclass
+class PuzzlePiece:
+    index: int
+    piece: str
 
-    def __call__(self, text):
-        raise NotImplementedError()
-
-class RowParser(PuzzleParser):
-    def __call__(self, text):
-        yield from map(reversed, enumerate(text, self.start))
-
-class ColumnParser(PuzzleParser):
-    def	__call__(self, text):
-        (nrow, ncol) = map(len, (text, text[0]))
-        for c in range(ncol):
-            col = ''.join(text[x][c] for x in range(nrow))
-            yield (col, c + self.start)
+    def __eq__(self, other):
+        return self.piece == other.piece
 
 #
 #
 #
-class ReflectionCollector:
-    def __init__(self, strict=True):
-        self.strict = strict
-        self.distance = None
-        self.reflections = set()
-
-    def __iter__(self):
-        if not self.strict or self.distance == 1:
-            yield from self.reflections
-
-    def add(self, u, v):
-        distance = abs(u - v)
-        if self.distance is None or distance < self.distance:
-            self.distance = distance
-            self.reflections.clear()
-
-        if distance == self.distance:
-            self.reflections.add(tuple(sorted((u, v))))
-
-class ReflectionExplorer:
-    @ft.cached_property
-    def shape(self):
-        axes = list(self.puzzle)
-        return tuple(x(axes) for x in (min, max))
-
+class PuzzleIterator:
     def __init__(self, puzzle):
         self.puzzle = puzzle
 
     def __iter__(self):
-        for i in self.reflections():
-            try:
-                yield self(*i) + 1
-            except ValueError:
-                pass
+        raise NotImplementedError()
 
-    def __call__(self, u, v):
-        if any(x == y for (x, y) in zip((u, v), self.shape)):
-            return 1
+class RowIterator(PuzzleIterator):
+    def __iter__(self):
+        yield from self.puzzle
 
-        (u, v) = (u - 1, v + 1)
-        if not self.legal(u, v):
-            raise ValueError()
-
-        return 1 + self(u, v)
-
-    def reflections(self):
-        collector = ReflectionCollector()
-        for (u, edges) in self.puzzle.items():
-            for v in edges:
-                collector.add(u, v)
-
-        yield from collector
-
-    def legal(self, u, v):
-        edge = (u, v)
-        n = len(edge)
-
-        for i in range(n):
-            (u_, v_) = (edge[x % n] for x in (i, i + 1))
-            if u_ not in self.puzzle or v_ not in self.puzzle[u_]:
-                return False
-
-        return True
+class ColumnIterator(PuzzleIterator):
+    def __iter__(self):
+        yield from map(''.join, zip(*self.puzzle))
 
 #
 #
 #
-def collect(parser):
-    puzzle = cl.defaultdict(set)
-    boundaries = [ None ] * 2
+class Reflection:
+    def __init__(self, smudges):
+        self.smudges = smudges
 
-    for (i, (k, v)) in enumerate(parser):
-        puzzle[k].add(v)
-        boundaries[bool(i)] = k
-    if not any(len(puzzle[x]) > 1 for x in boundaries):
-        raise ValueError('Invalid dimension')
+    def __call__(self, left, right):
+        s = 0
+        for view in zip(left, right):
+            for (l, r) in zip(*view):
+                s += l != r
+                if s > self.smudges:
+                    return False
 
-    yield from puzzle.values()
+        return s == self.smudges
 
-def invert(collection):
-    for dim in collection:
-        for d in dim:
-            exclusion = dim.difference([d])
-            yield (d, sorted(exclusion))
+#
+#
+#
+def walk(puzzle):
+    iterable = (enumerate(it.islice(puzzle, x, None), x) for x in range(2))
+    for p in zip(*iterable):
+        yield tuple(it.starmap(PuzzlePiece, p))
 
-def func(incoming, outgoing):
-    parsers = {
-        'r': RowParser(),
-        'c': ColumnParser(),
+def mirror(puzzle, reflection):
+    lhs = cl.deque()
+
+    for (left, right) in walk(puzzle):
+        lhs.appendleft(left.piece)
+        rhs = it.islice(puzzle, right.index, None)
+        if reflection(lhs, rhs):
+            return right.index
+
+    raise ValueError()
+
+def func(incoming, outgoing, args):
+    _parsers = {
+        'r': RowIterator,
+        'c': ColumnIterator,
     }
+    smudges = 0 if args.version == 1 else 1
+    reflection = Reflection(smudges)
 
     while True:
         text = incoming.get()
-        counts = cl.Counter()
 
-        for (n, extract) in parsers.items():
+        counts = cl.Counter()
+        for (axis, parse) in _parsers.items():
+            view = list(parse(text))
             try:
-                puzzle = dict(invert(collect(extract(text))))
-            except ValueError as err:
-                logging.error('%s: %s', err, n)
+                c = mirror(view, reflection)
+            except ValueError:
+                logging.error(axis)
                 continue
-            explorer = ReflectionExplorer(puzzle)
-            counts[n] += sum(explorer)
-        assert sum(map(bool, counts.values())) == 1,\
-            '{}\n{}'.format(counts, '\n'.join(text))
+            counts[axis] += c
 
         outgoing.put(counts)
 
@@ -148,7 +103,6 @@ def scanf(fp):
         else:
             yield text
             text = []
-
     if text:
         yield text
 
@@ -163,6 +117,7 @@ if __name__ == '__main__':
     initargs = (
         outgoing,
         incoming,
+        args,
     )
 
     with Pool(args.workers, func, initargs):
