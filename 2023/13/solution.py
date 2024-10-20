@@ -10,132 +10,54 @@ from multiprocessing import Pool, Queue
 #
 #
 #
-class PuzzleParser:
-    def __init__(self, start=1):
-        self.start = start
-
-    def __call__(self, text):
-        raise NotImplementedError()
-
-class RowParser(PuzzleParser):
-    def __call__(self, text):
-        yield from map(reversed, enumerate(text, self.start))
-
-class ColumnParser(PuzzleParser):
-    def	__call__(self, text):
-        (nrow, ncol) = map(len, (text, text[0]))
-        for c in range(ncol):
-            col = ''.join(text[x][c] for x in range(nrow))
-            yield (col, c + self.start)
-
-#
-#
-#
-class ReflectionCollector:
-    def __init__(self, strict=True):
-        self.strict = strict
-        self.distance = None
-        self.reflections = set()
-
-    def __iter__(self):
-        if not self.strict or self.distance == 1:
-            yield from self.reflections
-
-    def add(self, u, v):
-        distance = abs(u - v)
-        if self.distance is None or distance < self.distance:
-            self.distance = distance
-            self.reflections.clear()
-
-        if distance == self.distance:
-            self.reflections.add(tuple(sorted((u, v))))
-
-class ReflectionExplorer:
-    @ft.cached_property
-    def shape(self):
-        axes = list(self.puzzle)
-        return tuple(x(axes) for x in (min, max))
-
+class PuzzleIterator:
     def __init__(self, puzzle):
         self.puzzle = puzzle
 
     def __iter__(self):
-        for i in self.reflections():
-            try:
-                yield self(*i) + 1
-            except ValueError:
-                pass
+        raise NotImplementedError()
 
-    def __call__(self, u, v):
-        if any(x == y for (x, y) in zip((u, v), self.shape)):
-            return 1
+class RowIterator(PuzzleIterator):
+    def __iter__(self):
+        yield from self.puzzle
 
-        (u, v) = (u - 1, v + 1)
-        if not self.legal(u, v):
-            raise ValueError()
-
-        return 1 + self(u, v)
-
-    def reflections(self):
-        collector = ReflectionCollector()
-        for (u, edges) in self.puzzle.items():
-            for v in edges:
-                collector.add(u, v)
-
-        yield from collector
-
-    def legal(self, u, v):
-        edge = (u, v)
-        n = len(edge)
-
-        for i in range(n):
-            (u_, v_) = (edge[x % n] for x in (i, i + 1))
-            if u_ not in self.puzzle or v_ not in self.puzzle[u_]:
-                return False
-
-        return True
+class ColumnIterator(PuzzleIterator):
+    def __iter__(self):
+        yield from map(''.join, zip(*self.puzzle))
 
 #
 #
 #
-def collect(parser):
-    puzzle = cl.defaultdict(set)
-    boundaries = [ None ] * 2
+def reflection(puzzle):
+    lhs = cl.deque()
+    walker = (enumerate(it.islice(puzzle, x, None), x) for x in range(2))
+    
+    for ((i, l), (j, r)) in zip(*walker):
+        lhs.appendleft(l)
+        if l == r:
+            rhs = it.islice(puzzle, j, None)
+            if all(x == y for (x, y) in zip(lhs, rhs)):
+                return j
 
-    for (i, (k, v)) in enumerate(parser):
-        puzzle[k].add(v)
-        boundaries[bool(i)] = k
-    if not any(len(puzzle[x]) > 1 for x in boundaries):
-        raise ValueError('Invalid dimension')
-
-    yield from puzzle.values()
-
-def invert(collection):
-    for dim in collection:
-        for d in dim:
-            exclusion = dim.difference([d])
-            yield (d, sorted(exclusion))
-
+    raise ValueError()            
+    
 def func(incoming, outgoing):
     parsers = {
-        'r': RowParser(),
-        'c': ColumnParser(),
+        'r': RowIterator,
+        'c': ColumnIterator,
     }
 
     while True:
         text = incoming.get()
-        counts = cl.Counter()
 
-        for (n, extract) in parsers.items():
+        counts = cl.Counter()                
+        for (i, j) in parsers.items():
             try:
-                puzzle = dict(invert(collect(extract(text))))
-            except ValueError as err:
-                logging.error('%s: %s', err, n)
+                n = reflection(list(j(text)))
+            except ValueError:
+                logging.error(i)
                 continue
-            explorer = ReflectionExplorer(puzzle)
-            counts[n] += sum(explorer)
-        assert sum(map(bool, counts.values())) == 1,\
-            '{}\n{}'.format(counts, '\n'.join(text))
+            counts[i] += n
 
         outgoing.put(counts)
 
