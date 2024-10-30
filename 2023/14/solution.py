@@ -79,22 +79,18 @@ class West(Tilter):
 class Panel:
     _r_rock = 'O'
 
-    @classmethod
-    def from_fp(cls, fp):
-        return cls(list(map(list, fp.read().splitlines())))
-
     @ft.cached_property
     def shape(self):
         return tuple(map(len, (self.panel, self.panel[0])))
 
-    def __init__(self, panel):
-        self.panel = panel
+    def __init__(self, pstring):
+        self.panel = list(map(list, pstring.splitlines()))
 
     def __iter__(self):
         yield from map(''.join, self.panel)
 
-    def __hash__(self):
-        return hash(''.join(self))
+    def __str__(self):
+        return '\n'.join(self)
 
     def __int__(self):
         (nrows, _) = self.shape
@@ -132,54 +128,59 @@ class Spinner:
         self.directions = [ x(*self.panel.shape) for x in args ]
 
     def __iter__(self):
-        # pattern = cl.Counter()
         for c in range(self.cycles):
-            logging.critical('%d %d', c, int(panel))
+            logging.info('%d %d', c, int(panel))
             yield from self.directions
 
 class SingleSpinner(Spinner):
-    def __init__(self, panel, clip):
-        super().__init__(panel, clip, 1, North)
+    def __init__(self, panel):
+        super().__init__(panel, 1, North)
 
 class RepeatedSpinner(Spinner):
-    def __init__(self, panel, clip, cycles):
+    def __init__(self, panel, cycles):
         directions = (
             North,
             West,
             South,
             East,
         )
-        super().__init__(panel, clip, cycles, *directions)
+        super().__init__(panel, cycles, *directions)
 
 #
 #
 #
+@ft.cache
+def tilt(panel, direction):
+    pan = Panel(panel)
+
+    for pos in direction:
+        if pan.is_empty(pos):
+            for p in direction.walk(pos):
+                if not pan.is_empty(p):
+                    if pan.is_round(p):
+                        pan.swap(pos, p)
+                    break
+
+    return pan
+
 if __name__ == '__main__':
     arguments = ArgumentParser()
     arguments.add_argument('--cycles', type=int)
-    arguments.add_argument('--with-early-stopping', action='store_true')
+    # arguments.add_argument('--with-early-stopping', action='store_true')
     arguments.add_argument('--version', type=int, default=1, choices=(1, 2))
     args = arguments.parse_args()
 
-    panel = Panel.from_fp(sys.stdin)
+    panel = Panel(sys.stdin.read())
     if args.cycles is not None or args.version == 2:
         cycles = args.cycles or int(1e9)
-        spinner = RepeatedSpinner(panel, args.with_early_stopping, cycles)
+        spinner = RepeatedSpinner(panel, cycles)
     else:
-        spinner = SingleSpinner(panel, args.with_early_stopping)
+        spinner = SingleSpinner(panel)
 
-    for tilt in spinner:
-        for pos in tilt:
-            if panel.is_empty(pos):
-                for p in tilt.walk(pos):
-                    if not panel.is_empty(p):
-                        if panel.is_round(p):
-                            panel.swap(pos, p)
-                        break
+    for d in spinner:
+        panel = tilt(str(panel), d)
 
-        for row in panel:
-            logging.debug(row)
-
+    logging.critical(tilt.cache_info())
     for row in panel:
         logging.warning(row)
     print(int(panel))
