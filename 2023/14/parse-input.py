@@ -1,9 +1,8 @@
 import os
 import sys
-import logging
+# import logging
 import functools as ft
 import itertools as it
-import collections as cl
 from dataclasses import dataclass
 from argparse import ArgumentParser
 
@@ -29,7 +28,7 @@ class Tilter:
     def __iter__(self):
         raise NotImplementedError()
 
-    def walk(self, row, col):
+    def walk(self, position):
         raise NotImplementedError()
 
 class North(Tilter):
