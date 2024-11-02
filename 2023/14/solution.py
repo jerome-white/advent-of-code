@@ -1,3 +1,4 @@
+import os
 import sys
 import logging
 import functools as ft
@@ -77,8 +78,6 @@ class West(Tilter):
 #
 #
 class Panel:
-    _r_rock = 'O'
-
     @ft.cached_property
     def shape(self):
         return tuple(map(len, (self.panel, self.panel[0])))
@@ -86,16 +85,8 @@ class Panel:
     def __init__(self, pstring):
         self.panel = list(map(list, pstring.splitlines()))
 
-    def __iter__(self):
-        yield from map(''.join, self.panel)
-
-    def __str__(self):
-        return '\n'.join(self)
-
-    def __int__(self):
-        (nrows, _) = self.shape
-        iterable = zip(self, range(nrows, 0, -1))
-        return sum(x.count(self._r_rock) * y for (x, y) in iterable)
+    def __repr__(self):
+        return ','.join(map(''.join, self.panel))
 
     def get(self, position):
         return self.panel[position.row][position.col]
@@ -110,7 +101,7 @@ class Panel:
         return self.panel[pos.row][pos.col] == item
 
     def is_round(self, pos):
-        return self.is_item(pos, self._r_rock)
+        return self.is_item(pos, 'O')
 
     def is_cube(self, pos):
         return self.is_item(pos, '#')
@@ -125,62 +116,51 @@ class Spinner:
     def __init__(self, panel, cycles, *args):
         self.panel = panel
         self.cycles = cycles
-        self.directions = [ x(*self.panel.shape) for x in args ]
+        self.directions = [ x(*panel.shape) for x in args ]
 
     def __iter__(self):
-        for c in range(self.cycles):
-            logging.info('%d %d', c, int(panel))
+        for _ in self.cycles:
+            print(self.panel)
             yield from self.directions
 
 class SingleSpinner(Spinner):
     def __init__(self, panel):
-        super().__init__(panel, 1, North)
+        super().__init__(panel, range(1), North)
 
 class RepeatedSpinner(Spinner):
-    def __init__(self, panel, cycles):
+    def __init__(self, panel):
         directions = (
             North,
             West,
             South,
             East,
         )
-        super().__init__(panel, cycles, *directions)
+        super().__init__(panel, it.count(), *directions)
 
 #
 #
 #
-@ft.cache
-def tilt(panel, direction):
-    pan = Panel(panel)
-
-    for pos in direction:
-        if pan.is_empty(pos):
-            for p in direction.walk(pos):
-                if not pan.is_empty(p):
-                    if pan.is_round(p):
-                        pan.swap(pos, p)
-                    break
-
-    return pan
+def spin(panel, spinner):
+    for tilt in spinner:
+        for pos in tilt:
+            if panel.is_empty(pos):
+                for p in tilt.walk(pos):
+                    if not panel.is_empty(p):
+                        if panel.is_round(p):
+                            panel.swap(pos, p)
+                        break
 
 if __name__ == '__main__':
     arguments = ArgumentParser()
-    arguments.add_argument('--cycles', type=int)
-    # arguments.add_argument('--with-early-stopping', action='store_true')
     arguments.add_argument('--version', type=int, default=1, choices=(1, 2))
     args = arguments.parse_args()
 
+    MySpinner = SingleSpinner if args.version == 1 else RepeatedSpinner
+
     panel = Panel(sys.stdin.read())
-    if args.cycles is not None or args.version == 2:
-        cycles = args.cycles or int(1e9)
-        spinner = RepeatedSpinner(panel, cycles)
-    else:
-        spinner = SingleSpinner(panel)
-
-    for d in spinner:
-        panel = tilt(str(panel), d)
-
-    logging.critical(tilt.cache_info())
-    for row in panel:
-        logging.warning(row)
-    print(int(panel))
+    spinner = MySpinner(panel)
+    try:
+        spin(panel, spinner)
+    except BrokenPipeError:
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, sys.stdout.fileno())
