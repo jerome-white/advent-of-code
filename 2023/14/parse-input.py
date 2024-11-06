@@ -1,6 +1,6 @@
 import os
 import sys
-# import logging
+import logging
 import functools as ft
 import itertools as it
 from dataclasses import dataclass
@@ -108,6 +108,19 @@ class Panel:
     def is_empty(self, pos):
         return self.is_item(pos, '.')
 
+    def tilt(self, direction):
+        for pos in direction:
+            if self.is_empty(pos):
+                for p in direction.walk(pos):
+                    if not self.is_empty(p):
+                        if self.is_round(p):
+                            self.swap(pos, p)
+                        break
+
+    def spin(self, directions):
+        for d in directions:
+            self.tilt(d)
+
 #
 #
 #
@@ -118,13 +131,12 @@ class Spinner:
         self.directions = [ x(*panel.shape) for x in args ]
 
     def __iter__(self):
-        for _ in self.cycles:
-            print(self.panel)
-            yield from self.directions
+        for i in range(self.cycles, 0, -1):
+            yield (i, self.directions)
 
 class SingleSpinner(Spinner):
     def __init__(self, panel):
-        super().__init__(panel, range(1), North)
+        super().__init__(panel, 1, North)
 
 class RepeatedSpinner(Spinner):
     def __init__(self, panel):
@@ -134,20 +146,11 @@ class RepeatedSpinner(Spinner):
             South,
             East,
         )
-        super().__init__(panel, it.count(), *directions)
+        super().__init__(panel, int(1e9), *directions)
 
 #
 #
 #
-def spin(panel, spinner):
-    for tilt in spinner:
-        for pos in tilt:
-            if panel.is_empty(pos):
-                for p in tilt.walk(pos):
-                    if not panel.is_empty(p):
-                        if panel.is_round(p):
-                            panel.swap(pos, p)
-                        break
 
 if __name__ == '__main__':
     arguments = ArgumentParser()
@@ -159,7 +162,9 @@ if __name__ == '__main__':
     panel = Panel(sys.stdin.read())
     spinner = MySpinner(panel)
     try:
-        spin(panel, spinner)
+        for (i, s) in spinner:
+            panel.spin(s)
+            print(i - 1, panel)
     except BrokenPipeError:
         devnull = os.open(os.devnull, os.O_WRONLY)
         os.dup2(devnull, sys.stdout.fileno())
