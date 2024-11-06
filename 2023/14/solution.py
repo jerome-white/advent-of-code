@@ -2,9 +2,8 @@ import sys
 import csv
 import logging
 import collections as cl
-from argparse import ArgumentParser
 
-class CycleTracker:
+class PanelTracker:
     def __init__(self):
         self.panels = cl.OrderedDict()
 
@@ -24,23 +23,29 @@ class CycleTracker:
     def trace(self):
         yield from self.panels
 
+#
+#
+#
 def load(panel):
     for (i, p) in enumerate(reversed(panel.splitlines()), 1):
         yield i * p.count('O')
 
 def scanf(fp):
-    reader = csv.reader(fp)
-    yield from map('\n'.join, reader)
+    for line in fp:
+        (index, panel) = line.rstrip().split()
+        yield (
+            int(index),
+            panel.replace(',', '\n'),
+        )
 
 if __name__ == '__main__':
-    arguments = ArgumentParser()
-    arguments.add_argument('--rotations', type=int, default=int(1e9))
-    args = arguments.parse_args()
-
-    cycle = CycleTracker()
-    for (i, row) in enumerate(scanf(sys.stdin)):
+    panels = PanelTracker()
+    rotations = None
+    for (i, row) in scanf(sys.stdin):
+        if rotations is None:
+            rotations = i
         try:
-            cycle.push(row)
+            panels.push(row)
         except ValueError:
             break
         logging.info('{} {} {}'.format(
@@ -48,9 +53,13 @@ if __name__ == '__main__':
             row.replace('\n', '|'),
             sum(load(row)),
         ))
-    (t_full, t_cycle) = map(list, (cycle.trace(), cycle))
-    (m, n) = map(len, (t_full, t_cycle))
-    c = m - n
 
-    index = (args.rotations - c) % n
-    print(sum(load(t_cycle[index])))
+    (t_full, t_cycle) = map(list, (panels.trace(), panels))
+    if t_cycle:
+        (m, n) = map(len, (t_full, t_cycle))
+        c = m - n
+        index = (rotations - c) % n
+        panel = t_cycle[index]
+    else:
+        panel = t_full[-1]
+    print(sum(load(panel)))
