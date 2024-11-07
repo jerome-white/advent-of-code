@@ -77,6 +77,9 @@ class West(Tilter):
 #
 #
 class Panel:
+    _empty = '.'
+    _round = 'O'
+
     @ft.cached_property
     def shape(self):
         return tuple(map(len, (self.panel, self.panel[0])))
@@ -87,28 +90,20 @@ class Panel:
     def __repr__(self):
         return ','.join(map(''.join, self.panel))
 
-    def swap(self, l, r):
-        (self.panel[l.row][l.col], self.panel[r.row][r.col]) = (
-            self.panel[r.row][r.col],
-            self.panel[l.row][l.col],
-        )
+    def __getitem__(self, key):
+        return self.panel[key.row][key.col]
 
-    def is_item(self, pos, item):
-        return self.panel[pos.row][pos.col] == item
-
-    def is_round(self, pos):
-        return self.is_item(pos, 'O')
-
-    def is_empty(self, pos):
-        return self.is_item(pos, '.')
+    def __setitem__(self, key, value):
+        self.panel[key.row][key.col] = value
 
     def tilt(self, direction):
         for pos in direction:
-            if self.is_empty(pos):
+            if self[pos] == self._empty:
                 for p in direction.walk(pos):
-                    if not self.is_empty(p):
-                        if self.is_round(p):
-                            self.swap(pos, p)
+                    value = self[p]
+                    if value != self._empty:
+                        if value == self._round:
+                            (self[pos], self[p]) = (self[p], self[pos])
                         break
 
     def spin(self, directions):
