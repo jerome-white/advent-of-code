@@ -87,9 +87,6 @@ class Panel:
     def __repr__(self):
         return ','.join(map(''.join, self.panel))
 
-    def get(self, position):
-        return self.panel[position.row][position.col]
-
     def swap(self, l, r):
         (self.panel[l.row][l.col], self.panel[r.row][r.col]) = (
             self.panel[r.row][r.col],
@@ -101,9 +98,6 @@ class Panel:
 
     def is_round(self, pos):
         return self.is_item(pos, 'O')
-
-    def is_cube(self, pos):
-        return self.is_item(pos, '#')
 
     def is_empty(self, pos):
         return self.is_item(pos, '.')
@@ -126,7 +120,6 @@ class Panel:
 #
 class Spinner:
     def __init__(self, panel, cycles, *args):
-        self.panel = panel
         self.cycles = cycles
         self.directions = [ x(*panel.shape) for x in args ]
 
