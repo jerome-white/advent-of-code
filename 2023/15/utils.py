@@ -1,12 +1,14 @@
 import csv
-from dataclasses import dataclass
 
-@dataclass
 class Step:
-    step: str
+    def __init__(self, step):
+        self.step = step
 
     def __str__(self):
         return self.step
+
+    def __eq__(self, other):
+        return self.step == other.step
 
     def __hash__(self):
         current = 0
