@@ -150,6 +150,7 @@ class MultiStartContraption(ContraptionParser):
 
             for t in trajectories:
                 yield State(e, t)
+
             trajectories.clear()
 
     def edge(self):
@@ -167,8 +168,8 @@ def explore(contraption, state, history):
 
         action = contraption[state.pos]
         for a in action(state.traj):
-            v = State(state.pos + a, a)
-            yield from explore(contraption, v, history)
+            s = State(state.pos + a, a)
+            yield from explore(contraption, s, history)
 
 def func(incoming, outgoing, contraption, args):
     history = set()
