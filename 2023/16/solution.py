@@ -161,29 +161,37 @@ class MultiStartContraption(ContraptionParser):
 #
 #
 #
-def explore(contraption, state, history):
-    if state not in history and state.pos in contraption:
-        history.add(state)
-        yield state.pos
+class ContraptionBeam:
+    def __init__(self, contraption):
+        self.contraption = contraption
+        self.history = set()
 
-        action = contraption[state.pos]
-        for a in action(state.traj):
-            s = State(state.pos + a, a)
-            yield from explore(contraption, s, history)
+    def __call__(self, start):
+        self.history.clear()
+        yield from self.explore(start)
 
+    def explore(self, state):
+        if state not in self.history and state.pos in self.contraption:
+            self.history.add(state)
+            yield state.pos
+
+            action = self.contraption[state.pos]
+            for a in action(state.traj):
+                s = State(state.pos + a, a)
+                yield from self.explore(s)
+
+#
+#
+#
 def func(incoming, outgoing, contraption, args):
-    history = set()
+    beam = ContraptionBeam(contraption)
     if args.recursive_limit:
         sys.setrecursionlimit(args.recursive_limit)
 
     while True:
         start = incoming.get()
         logging.warning(start)
-
-        energized = explore(contraption, start, history)
-        outgoing.put(len(set(energized)))
-
-        history.clear()
+        outgoing.put(len(set(beam(start))))
 
 def scanf(fp):
     dtypes = { str(x): x for x in (
