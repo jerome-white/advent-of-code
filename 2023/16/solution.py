@@ -3,6 +3,7 @@ import logging
 import functools as ft
 from dataclasses import dataclass
 from argparse import ArgumentParser
+from multiprocessing import Pool, Queue
 
 #
 #
@@ -21,19 +22,20 @@ class Coordinate:
     def __add__(self, other):
         return type(self)(self.row + other.row, self.col + other.col)
 
+@dataclass(frozen=True)
+class State:
+    pos: Coordinate
+    traj: Coordinate
+
 #
 #
 #
 class Action:
-    def __init__(self, value, magnitude=0):
+    def __init__(self, value):
         self.value = value
-        self.magnitude = magnitude
 
     def __str__(self):
         return self.value
-
-    def __int__(self):
-        return self.magnitude
 
     def __call__(self, trajectory):
         yield trajectory
@@ -41,10 +43,6 @@ class Action:
 class EmptySpace(Action):
     def __init__(self):
         super().__init__('.')
-
-class Energized(Action):
-    def	__init__(self):
-        super().__init__('#', 1)
 
 class UpwardMirror(Action):
     def __init__(self):
@@ -98,38 +96,61 @@ class HorizontalSplitter(Splitter):
 #
 #
 #
-class Contraption(dict):
+class ContraptionParser:
+    def __init__(self, contraption):
+        self.contraption = contraption
+
+    def __iter__(self):
+        raise NotImplementedError()
+
+class SingleStartContraption(ContraptionParser):
+    def	__iter__(self):
+        args = (Coordinate(0, x) for x in (range(2)))
+        yield State(*args)
+
+class MultiStartContraption(ContraptionParser):
     @ft.cached_property
     def shape(self):
-        (rows, cols) = (0, 0)
-        for p in self:
-            if p.row > rows:
-                rows = p.row + 1
-            if p.col > cols:
-                cols = p.col + 1
+        (rows, cols) = (None, None)
+        for p in self.contraption:
+            if rows is None or p.row > rows:
+                rows = p.row
+            if cols is None or p.col > cols:
+                cols = p.col
 
         return Coordinate(rows, cols)
 
-    def __str__(self):
-        dim = self.shape
-        board = [ [None] * dim.col for _ in range(dim.row) ]
-        for (k, v) in self.items():
-            board[k.row][k.col] = str(v)
+    def __iter__(self):
+        for r in (0, self.shape.row):
+            for c in (0, self.shape.col):
+                yield Coordinate(r, c)
 
-        return '\n'.join(map(''.join, board))
+#
+#
+#
+def explore(contraption, state, history):
+    if state not in history and state.pos in contraption:
+        history.add(state)
+        yield state.pos
 
-    def __int__(self):
-        return sum(map(int, self.values()))
+        action = contraption[state.pos]
+        for a in action(state.traj):
+            v = State(state.pos + a, a)
+            yield from explore(contraption, v, history)
 
-    def _explore(self, position, trajectory):
-        if position in self:
-            action = self[position]
-            self[position] = Energized()
-            for a in action(trajectory):
-                self._explore(position + a, a)
+def func(incoming, outgoing, contraption, args):
+    history = set()
+    if args.recursive_limit:
+        sys.setrecursionlimit(args.recursive_limit)
 
-    def explore(self):
-        return self._explore(Coordinate(0, 0), Coordinate(0, 1))
+    while True:
+        start = incoming.get()
+        logging.warning(start)
+
+        energized = explore(contraption, start, history)
+        outgoing.put(len(set(energized)))
+
+        history.clear()
 
 def scanf(fp):
     dtypes = { str(x): x for x in (
@@ -146,15 +167,40 @@ def scanf(fp):
             action = dtypes[cell]
             yield (pos, action)
 
+def energized(contraption, args):
+    incoming = Queue()
+    outgoing = Queue()
+    initargs = (
+        outgoing,
+        incoming,
+        contraption,
+        args,
+    )
+
+    with Pool(args.workers, func, initargs):
+        if args.version == 1:
+            MyStarter = SingleStartContraption
+        else:
+            MyStarter = MultiStartContraption
+        starter = MyStarter(contraption)
+
+        jobs = 0
+        for s in starter:
+            outgoing.put(s)
+            jobs += 1
+
+        for _ in range(jobs):
+            result = incoming.get()
+            yield result
+
 #
 #
 #
 if __name__ == '__main__':
     arguments = ArgumentParser()
     arguments.add_argument('--version', type=int, default=1, choices=(1, 2))
+    arguments.add_argument('--recursive-limit', type=int)
+    arguments.add_argument('--workers', type=int)
     args = arguments.parse_args()
 
-    contraption = Contraption(dict(scanf(sys.stdin)))
-    contraption.explore()
-    print(contraption)
-    print(int(contraption))
+    print(max(energized(dict(scanf(sys.stdin)), args)))
