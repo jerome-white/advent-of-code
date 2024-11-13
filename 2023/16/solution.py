@@ -1,5 +1,6 @@
 import sys
 import logging
+import itertools as it
 import functools as ft
 from dataclasses import dataclass
 from argparse import ArgumentParser
@@ -12,6 +13,12 @@ from multiprocessing import Pool, Queue
 class Coordinate:
     row: int
     col: int
+
+    def __iter__(self):
+        yield from (
+            self.row,
+            self.col,
+        )
 
     def __neg__(self):
         return type(self)(-self.row, -self.col)
@@ -109,6 +116,11 @@ class SingleStartContraption(ContraptionParser):
         yield State(*args)
 
 class MultiStartContraption(ContraptionParser):
+    _up    = Coordinate(-1,  0)
+    _down  = Coordinate( 1,  0)
+    _left  = Coordinate( 0, -1)
+    _right = Coordinate( 0,  1)
+
     @ft.cached_property
     def shape(self):
         (rows, cols) = (None, None)
@@ -120,10 +132,30 @@ class MultiStartContraption(ContraptionParser):
 
         return Coordinate(rows, cols)
 
+    def __init__(self, contraption):
+        super().__init__(contraption)
+        self.dim = Coordinate(*(x - 1 for x in self.shape))
+
     def __iter__(self):
-        for r in (0, self.shape.row):
-            for c in (0, self.shape.col):
-                yield Coordinate(r, c)
+        trajectories = []
+        for e in self.edge():
+            trajectories.clear()
+            if not e.row:
+                trajectories.append(self._down)
+            if not e.col:
+                trajectories.append(self._right)
+            if e.row == self.dim.row:
+                trajectories.append(self._up)
+            if e.col == self.dim.col:
+                trajectories.append(self._left)
+
+            for t in trajectories:
+                yield State(e, t)
+
+    def edge(self):
+        for i in it.product(*map(range, self.shape)):
+            if any(x in (0, y) for (x, y) in zip(i, self.dim)):
+                yield Coordinate(*i)
 
 #
 #
