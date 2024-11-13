@@ -23,11 +23,11 @@ class Coordinate:
     def __neg__(self):
         return type(self)(-self.row, -self.col)
 
-    def __invert__(self):
-        return type(self)(self.col, self.row)
-
     def __add__(self, other):
         return type(self)(self.row + other.row, self.col + other.col)
+
+    def __invert__(self):
+        return type(self)(self.col, self.row)
 
 @dataclass(frozen=True)
 class State:
@@ -139,7 +139,6 @@ class MultiStartContraption(ContraptionParser):
     def __iter__(self):
         trajectories = []
         for e in self.edge():
-            trajectories.clear()
             if not e.row:
                 trajectories.append(self._down)
             if not e.col:
@@ -151,6 +150,7 @@ class MultiStartContraption(ContraptionParser):
 
             for t in trajectories:
                 yield State(e, t)
+            trajectories.clear()
 
     def edge(self):
         for i in it.product(*map(range, self.shape)):
@@ -193,8 +193,8 @@ def scanf(fp):
         HorizontalSplitter(),
     )}
 
-    for (r, y) in enumerate(fp):
-        for (c, cell) in enumerate(y.strip()):
+    for (r, row) in enumerate(fp):
+        for (c, cell) in enumerate(row.strip()):
             pos = Coordinate(r, c)
             action = dtypes[cell]
             yield (pos, action)
