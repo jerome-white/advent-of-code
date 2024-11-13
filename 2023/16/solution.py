@@ -51,7 +51,7 @@ class UpwardMirror(Action):
         super().__init__('/')
 
     def __call__(self, trajectory):
-        yield ~-trajectory
+        yield -~trajectory
 
 class DownwardMirror(Action):
     def __init__(self):
