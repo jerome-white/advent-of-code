@@ -132,13 +132,13 @@ class Contraption(dict):
         return self._explore(Coordinate(0, 0), Coordinate(0, 1))
 
 def scanf(fp):
-    dtypes = {
-        '.':  EmptySpace(),
-        '/':  UpwardMirror(),
-        '\\': DownwardMirror(),
-        '|':  VerticalSplitter(),
-        '-':  HorizontalSplitter(),
-    }
+    dtypes = { str(x): x for x in (
+        EmptySpace(),
+        UpwardMirror(),
+        DownwardMirror(),
+        VerticalSplitter(),
+        HorizontalSplitter(),
+    )}
 
     for (r, y) in enumerate(fp):
         for (c, cell) in enumerate(y.strip()):
