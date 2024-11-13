@@ -95,7 +95,7 @@ if __name__ == '__main__':
         index = hash(s)
         boxes.update(s)
 
-    if logging.isEnabledFor(logging.INFO):
+    if logging.getLogger().isEnabledFor(logging.INFO):
         for r in boxes.boxes():
             logging.info(r)
 
