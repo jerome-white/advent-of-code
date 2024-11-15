@@ -50,9 +50,10 @@ class History:
 
 class BoardNavigator:
     _navigation = {
-        '^': (-1, 0), # up
-        '>': ( 0, 1), # right
-        'v': ( 1, 0), # down
+        '^': (-1,  0), # up
+        'v': ( 1,  0), # down
+        '<': ( 0, -1), # left
+        '>': ( 0,  1), # right
     }
 
     def __init__(self, missing='*'):
