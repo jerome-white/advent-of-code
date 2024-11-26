@@ -1,169 +1,194 @@
 import sys
+import math
+import heapq
 import logging
 import itertools as it
 import functools as ft
-import collections as cl
 from argparse import ArgumentParser
-from dataclasses import dataclass, astuple
+from dataclasses import dataclass
 
 #
 #
 #
+@dataclass(order=True, frozen=True)
+class Position:
+    x: int
+    y: int
+
+    def __str__(self):
+        return f'({self.x},{self.y})'
+
+    def __add__(self, other):
+        return type(self)(self.x + other.x, self.y + other.y)
+
+    def __sub__(self, other):
+        return type(self)(self.x - other.x, self.y - other.y)
+
 @dataclass(frozen=True)
-class Coordinate:
-    row: int
-    col: int
+class Node:
+    position: Position
+    heading: Position
+    momentum: int
 
-    def __eq__(self, other):
-        return self.row == other.row and self.col == other.col
-
+    @ft.singledispatchmethod
     def __add__(self, other):
-        return type(self)(self.row + other.row, self.col + other.col)
+        raise TypeError(type(other))
 
-class History:
-    # https://docs.python.org/3/library/itertools.html#itertools-recipes
+    @__add__.register
+    def _(self, other: Position):
+        position = self.position + other
+
+        momentum = 1
+        if self.heading == other:
+            momentum += self.momentum
+
+        return type(self)(position, other, momentum)
+
+#
+#
+#
+class Compass:
+    _directions = (
+        (-1,  0), # up
+        ( 0,  1), # right
+        ( 1,  0), # down
+        ( 0, -1), # left
+    )
+
+    def __init__(self):
+        self.directions = list(it.starmap(Position, self._directions))
+
+    def __iter__(self):
+        yield from self.directions
+
+    def __call__(self, node):
+        yield from (node + x for x in self)
+
+#
+#
+#
+class VertextPolice:
     @staticmethod
-    def all_equal(iterable):
-        g = it.groupby(iterable)
-        return next(g, True) and not next(g, False)
+    def okay(u, v):
+        return True
 
-    def __init__(self, maxlen=None, history=None):
-        assert bool(maxlen) ^ bool(history)
-        self.history = history or cl.deque(maxlen=maxlen)
+    def __init__(self, police=None):
+        self.police = police or self.okay
 
-    def __bool__(self):
-        n = len(self.history)
-        if n < self.history.maxlen:
-            return True
+    def __call__(self, u, v):
+        return self.check(u, v) and self.police(u, v)
 
-        n -= self.history.maxlen
-        return not self.all_equal(it.islice(self.history, n, None))
+    def check(self, u, v):
+        raise NotImplementedError()
 
-    def __add__(self, other):
-        history = self.history.copy()
-        history.append(other)
+class MomentumChecker(VertextPolice):
+    def __init__(self, upper, police=None):
+        super().__init__(police)
+        self.upper = upper
 
-        return type(self)(history=history)
+    def check(self, u, v):
+        return v.momentum <= self.upper
 
-    def peek(self):
-        return self.history[-1] if self.history else None
+class HeadingChecker(VertextPolice):
+    _stationary = Position(0, 0)
 
-class BoardNavigator:
-    _navigation = {
-        '^': (-1,  0), # up
-        'v': ( 1,  0), # down
-        '<': ( 0, -1), # left
-        '>': ( 0,  1), # right
-    }
+    def check(self, u, v):
+        return u.heading + v.heading != self._stationary
 
-    def __init__(self, missing='*'):
-        self.missing = missing
-        self.navigation = {
-            Coordinate(*y): x for (x, y) in self._navigation.items()
+class PositionChecker(VertextPolice):
+    def __init__(self, positions, police=None):
+        super().__init__(police)
+        self.positions = positions
+
+    def check(self, u, v):
+        return v.position in self.positions
+
+#
+#
+#
+class Graph(dict):
+    @ft.cached_property
+    def shape(self):
+        return (Position(0, 0), max(self))
+
+    @ft.singledispatchmethod
+    def at(self, item):
+        raise TypeError(type(item))
+
+    @at.register
+    def _(self, item: Position):
+        return self[item]
+
+    @at.register
+    def _(self, item: Node):
+        return self.at(item.position)
+
+class PathFinder:
+    @dataclass
+    class Route:
+        node: Node
+        distance: int
+
+        def __lt__(self, other):
+            return self.distance < other.distance
+
+    def __init__(self, graph):
+        (source, self.target) = graph.shape
+        node = Node(source, Position(0, 0), 0)
+        route = self.Route(node, graph.get(source))
+        self.unseen = [ route ]
+        self.cache = {
+            node: route.distance,
         }
 
     def __iter__(self):
-        yield from self.navigation
+        heapq.heapify(self.unseen)
+        return self
 
-    def to_string(self, coord):
-        if coord not in self.navigation:
-            return self.missing
+    def __next__(self):
+        route = heapq.heappop(self.unseen)
+        if route.node.position == self.target or math.isinf(route.distance):
+            logging.critical(route)
+            raise StopIteration()
 
-        return self.navigation[coord]
+        return route
 
-class Board:
-    @ft.cached_property
-    def shape(self):
-        return tuple(len(x) for x in (self.board, self.board[0]))
+    def at(self, node):
+        return self.cache.get(node, math.inf)
 
-    @ft.cached_property
-    def start(self):
-        return self.board[0][0]
+    def push(self, node, distance):
+        self.cache[node] = distance
+        route = self.Route(node, distance)
+        heapq.heappush(self.unseen, route)
 
-    def __init__(self, board):
-        self.board = board
-        self.navigation = BoardNavigator()
-        self.end = Coordinate(*(x - 1 for x in self.shape))
-
-    def __iter__(self):
-        yield from self.navigation
-
-    def __getitem__(self, key):
-        return self.board[key.row][key.col]
-
-    def __contains__(self, item):
-        return all(0 <= x < y for (x, y) in zip(astuple(item), self.shape))
-
-    def target(self, coord):
-        return self.end == coord
-
-    def to_strings(self, special=None):
-        if special is None:
-            special = {}
-
-        for (r, row) in enumerate(self.board):
-            record = []
-            for (c, cell) in enumerate(row):
-                coord = Coordinate(r, c)
-                if coord in special:
-                    rec = self.navigation.to_string(special.get(coord))
-                else:
-                    rec = str(cell)
-                record.append(rec)
-            yield ''.join(record)
-
-class MachinePartsFactory:
-    def __init__(self, board, history):
-        self.board = board
-        self.history = history
-
-        self.lower = None
-        self.visited = {}
-
-    def __int__(self):
-        return self.lower - self.board.start
-
-    def __call__(self):
-        self.visited.clear()
-        return self.walk(Coordinate(0, 0), self.history, 0)
-
-    def walk(self, coord, path, heat):
-        if coord not in self.board or coord in self.visited or not path:
-            return
-
-        heat += self.board[coord]
-        if self.lower is not None and heat >= self.lower:
-            return
-
-        self.visited[coord] = path.peek()
-        if self.board.target(coord):
-            self.lower = heat
-            if logging.getLogger().isEnabledFor(logging.WARNING):
-                for s in self.board.to_strings(self.visited):
-                    logging.warning(s)
-            logging.critical(int(self))
-        else:
-            for c in self.board:
-                self.walk(coord + c, path + c, heat)
-        self.visited.pop(coord)
-
+#
+#
+#
 def scanf(fp):
-    for row in fp:
-        yield list(map(int, row.strip()))
+    for (r, row) in enumerate(fp):
+        for (c, cell) in enumerate(row.strip()):
+            position = Position(r, c)
+            yield (position, int(cell))
 
-#
-#
-#
 if __name__ == '__main__':
     arguments = ArgumentParser()
     arguments.add_argument('--version', type=int, default=1, choices=(1, 2))
     arguments.add_argument('--max-direction', type=int, default=3)
-    # arguments.add_argument('--recursive-limit', type=int)
     args = arguments.parse_args()
 
-    board = Board(list(scanf(sys.stdin)))
-    history = History(args.max_direction + 1)
+    graph = Graph(scanf(sys.stdin))
+    walker = PathFinder(graph)
 
-    machine = MachinePartsFactory(board, history)
-    machine()
-    print(int(machine))
+    acceptable = MomentumChecker(args.max_direction)
+    acceptable = HeadingChecker(acceptable)
+    acceptable = PositionChecker(graph.keys(), acceptable)
+
+    compass = Compass()
+
+    for i in walker:
+        logging.warning(i)
+        for n in compass(i.node):
+            if acceptable(i.node, n):
+                distance = graph.at(n) + i.distance
+                if distance < walker.at(n):
+                    walker.push(n, distance)
