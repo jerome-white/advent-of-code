@@ -129,13 +129,15 @@ class PathFinder:
         node: Node
         distance: int
 
+        def __int__(self):
+            return self.distance
+
         def __lt__(self, other):
             return self.distance < other.distance
 
-    def __init__(self, graph):
-        (source, self.target) = graph.shape
-        node = Node(source, Position(0, 0), 0)
-        route = self.Route(node, graph.get(source))
+    def __init__(self, node):
+        route = self.Route(node, 0)
+
         self.unseen = [ route ]
         self.cache = {
             node: route.distance,
@@ -146,12 +148,10 @@ class PathFinder:
         return self
 
     def __next__(self):
-        route = heapq.heappop(self.unseen)
-        if route.node.position == self.target or math.isinf(route.distance):
-            logging.critical(route)
+        if not self.unseen:
             raise StopIteration()
 
-        return route
+        return heapq.heappop(self.unseen)
 
     def at(self, node):
         return self.cache.get(node, math.inf)
@@ -160,6 +160,9 @@ class PathFinder:
         self.cache[node] = distance
         route = self.Route(node, distance)
         heapq.heappush(self.unseen, route)
+
+    def touched(self, route):
+        return not math.isinf(route.distance)
 
 #
 #
@@ -170,14 +173,10 @@ def scanf(fp):
             position = Position(r, c)
             yield (position, int(cell))
 
-if __name__ == '__main__':
-    arguments = ArgumentParser()
-    arguments.add_argument('--version', type=int, default=1, choices=(1, 2))
-    arguments.add_argument('--max-direction', type=int, default=3)
-    args = arguments.parse_args()
-
-    graph = Graph(scanf(sys.stdin))
-    walker = PathFinder(graph)
+def walk(graph, args):
+    (source, target) = graph.shape
+    node = Node(source, Position(0, 0), 0)
+    gpath = PathFinder(node)
 
     acceptable = MomentumChecker(args.max_direction)
     acceptable = HeadingChecker(acceptable)
@@ -185,10 +184,24 @@ if __name__ == '__main__':
 
     compass = Compass()
 
-    for i in walker:
-        logging.warning(i)
-        for n in compass(i.node):
-            if acceptable(i.node, n):
-                distance = graph.at(n) + i.distance
-                if distance < walker.at(n):
-                    walker.push(n, distance)
+    for src in gpath:
+        if src.node.position == target or not gpath.touched(src):
+            logging.critical(src)
+            return src
+
+        logging.info(src)
+        for n in compass(src.node):
+            if acceptable(src.node, n):
+                distance = graph.at(n) + src.distance
+                if distance < gpath.at(n):
+                    gpath.push(n, distance)
+
+if __name__ == '__main__':
+    arguments = ArgumentParser()
+    arguments.add_argument('--version', type=int, default=1, choices=(1, 2))
+    arguments.add_argument('--max-direction', type=int, default=3)
+    args = arguments.parse_args()
+
+    graph = Graph(scanf(sys.stdin))
+    route = walk(graph, args)
+    print(int(route))
