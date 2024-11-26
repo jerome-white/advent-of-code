@@ -82,12 +82,27 @@ class VertextPolice:
         raise NotImplementedError()
 
 class MomentumChecker(VertextPolice):
-    def __init__(self, upper, police=None):
+    def __init__(self, limit, police=None):
         super().__init__(police)
-        self.upper = upper
+        self.limit = limit
+
+class MaxMomentumChecker(MomentumChecker):
+    def check(self, u, v):
+        return v.momentum <= self.limit
+
+class MinMomentumChecker(MomentumChecker):
+    def __init__(self, source, target, limit, police=None):
+        super().__init__(limit, police)
+        self.source = source
+        self.target = target
 
     def check(self, u, v):
-        return v.momentum <= self.upper
+        if u.position == self.source:
+            return True
+        if v.position == self.target:
+            return v.momentum >= self.limit
+
+        return u.heading == v.heading or u.momentum >= self.limit
 
 class HeadingChecker(VertextPolice):
     _stationary = Position(0, 0)
@@ -177,15 +192,20 @@ def scanf(fp):
             yield (position, int(cell))
 
 def walk(graph, args):
+    compass = Compass()
+
     (source, target) = graph.shape
     node = Node(source, Position(0, 0), 0)
     gpath = PathFinder(node)
 
-    acceptable = MomentumChecker(args.max_direction)
-    acceptable = HeadingChecker(acceptable)
+    acceptable = HeadingChecker()
     acceptable = PositionChecker(graph.keys(), acceptable)
-
-    compass = Compass()
+    if args.version == 1:
+        momentum = 3
+    else:
+        momentum = 10
+        acceptable = MinMomentumChecker(source, target, 4, acceptable)
+    acceptable = MaxMomentumChecker(momentum, acceptable)
 
     for src in gpath:
         if src.node.position == target or not gpath.touched(src):
@@ -199,10 +219,11 @@ def walk(graph, args):
                 if distance < gpath.at(n):
                     gpath.push(n, distance)
 
+    raise ValueError()
+
 if __name__ == '__main__':
     arguments = ArgumentParser()
     arguments.add_argument('--version', type=int, default=1, choices=(1, 2))
-    arguments.add_argument('--max-direction', type=int, default=3)
     args = arguments.parse_args()
 
     graph = Graph(scanf(sys.stdin))
