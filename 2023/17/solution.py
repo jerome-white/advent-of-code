@@ -136,15 +136,18 @@ class PathFinder:
             return self.distance < other.distance
 
     def __init__(self, node):
-        route = self.Route(node, 0)
-
-        self.unseen = [ route ]
-        self.cache = {
-            node: route.distance,
-        }
+        self.start = self.Route(node, 0)
+        self.cache = {}
+        self.unseen = []
 
     def __iter__(self):
+        self.cache.clear()
+        self.cache[self.start.node] = self.start.distance
+
+        self.unseen.clear()
+        self.unseen.append(self.start)
         heapq.heapify(self.unseen)
+
         return self
 
     def __next__(self):
