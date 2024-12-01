@@ -10,29 +10,50 @@ from shapely import Point, Polygon
 class Step:
     direction: Point
     length: int
-    color: str
 
 #
 #
 #
-def scanf(fp):
-    directions = { x: Point(*y) for (x, y) in (
-        ('U', (-1,  0)),
-        ('D', ( 1,  0)),
-        ('L', ( 0, -1)),
-        ('R', ( 0,  1)),
-    )}
+class MapReader:
+    def __init__(self, fp, up, down, left, right):
+        self.fp = fp
+        self.navigation = { x: Point(*y) for (x, y) in (
+            (up,    (-1,  0)),
+            (down,  ( 1,  0)),
+            (left,  ( 0, -1)),
+            (right, ( 0,  1)),
+        )}
 
-    for line in fp:
-        (d, l, c) = line.strip().split()
+    def __iter__(self):
+        for line in self.fp:
+            (d, l) = self.parse(*line.strip().split())
+            d = self.navigation[d]
 
-        d = directions[d]
-        l = int(l)
+            yield Step(d, l)
+
+    def direction(self, d, l, c):
+        raise NotImplementedError()
+
+class StandardMapReader(MapReader):
+    def __init__(self, fp):
+        super().__init__(fp, 'U', 'D', 'L', 'R')
+
+    def parse(self, d, l, c):
+        return (d, int(l))
+
+class SwappedMapReader(MapReader):
+    def __init__(self, fp):
+        super().__init__(fp, '3', '1', '2', '0')
+
+    def parse(self, d, l, c):
         assert c.startswith('(#') and c.endswith(')')
-        c = c[2:-1]
 
-        yield Step(d, l, c)
+        (l, d) = (c[2:-2], c[-2])
+        return (d, int(l, 16))
 
+#
+#
+#
 def dig(instructions, pt):
     for step in instructions:
         for s in it.repeat(step.direction, step.length):
@@ -51,8 +72,10 @@ if __name__ == '__main__':
     arguments.add_argument('--version', type=int, default=1, choices=(1, 2))
     args = arguments.parse_args()
 
+    reader = StandardMapReader if args.version == 1 else SwappedMapReader
+
     start = Point(0, 0)
-    iterable = dig(scanf(sys.stdin), start)
+    iterable = dig(reader(sys.stdin), start)
     polygon = Polygon(it.chain([start], iterable))
 
     print(sum(area(polygon)))
