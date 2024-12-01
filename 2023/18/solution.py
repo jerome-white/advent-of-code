@@ -1,6 +1,7 @@
 import sys
 # import logging
 import itertools as it
+import functools as ft
 from argparse import ArgumentParser
 from dataclasses import dataclass
 
@@ -10,6 +11,17 @@ from shapely import Point, Polygon
 class Step:
     direction: Point
     length: int
+
+    @ft.singledispatchmethod
+    def __add__(self, other):
+        raise TypeError(type(other))
+
+    @__add__.register
+    def _(self, other: Point):
+        iterable = zip(other.xy, self.direction.xy)
+        args = (x[0] + y[0] * self.length for (x, y) in iterable)
+
+        return Point(*args)
 
 #
 #
@@ -47,8 +59,8 @@ class SwappedMapReader(MapReader):
 
     def parse(self, d, l, c):
         assert c.startswith('(#') and c.endswith(')')
-
         (l, d) = (c[2:-2], c[-2])
+
         return (d, int(l, 16))
 
 #
@@ -56,9 +68,8 @@ class SwappedMapReader(MapReader):
 #
 def dig(instructions, pt):
     for step in instructions:
-        for s in it.repeat(step.direction, step.length):
-            pt = Point(pt.x + s.x, pt.y + s.y)
-            yield pt
+        pt = step + pt
+        yield pt
 
 def area(polygon):
     (x1, y1, x2, y2) = map(int, polygon.bounds)
