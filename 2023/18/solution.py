@@ -1,34 +1,22 @@
 import sys
-import logging
+# import logging
 import itertools as it
-import operator as op
 from argparse import ArgumentParser
-from dataclasses import dataclass, fields, replace, astuple
+from dataclasses import dataclass
 
 from shapely import Point, Polygon
 
 @dataclass(frozen=True)
-class Position:
-    row: int
-    col: int
-
-    def __add__(self, other):
-        return type(self)(self.row + other.row, self.col + other.col)
-
-@dataclass(frozen=True)
 class Step:
-    direction: Position
+    direction: Point
     length: int
     color: str
-
-    def __iter__(self):
-        yield from it.repeat(self.direction, self.length)
 
 #
 #
 #
 def scanf(fp):
-    directions = { x: Position(*y) for (x, y) in (
+    directions = { x: Point(*y) for (x, y) in (
         ('U', (-1,  0)),
         ('D', ( 1,  0)),
         ('L', ( 0, -1)),
@@ -45,25 +33,26 @@ def scanf(fp):
 
         yield Step(d, l, c)
 
-def dig(instructions, position):
+def dig(instructions, pt):
     for step in instructions:
-        for s in step:
-            position += s
-            yield position
+        for s in it.repeat(step.direction, step.length):
+            pt = Point(pt.x + s.x, pt.y + s.y)
+            yield pt
 
 def area(polygon):
-    (*_, rows, cols) = (int(x) + 1 for x in polygon.bounds)
-    for r in range(rows):
-        for c in range(cols):
-            pt = Point(r, c)
-            yield polygon.intersects(pt)
+    (x1, y1, x2, y2) = map(int, polygon.bounds)
+    iterable = (range(x, y + 1) for (x, y) in ((x1, x2), (y1, y2)))
+
+    for (r, c) in it.product(*iterable):
+        yield polygon.intersects(Point(r, c))
 
 if __name__ == '__main__':
     arguments = ArgumentParser()
     arguments.add_argument('--version', type=int, default=1, choices=(1, 2))
     args = arguments.parse_args()
 
-    start = Position(0, 0)
+    start = Point(0, 0)
     iterable = dig(scanf(sys.stdin), start)
-    polygon = Polygon(map(astuple, it.chain([start], iterable)))
+    polygon = Polygon(it.chain([start], iterable))
+
     print(sum(area(polygon)))
