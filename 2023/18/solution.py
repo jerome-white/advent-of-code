@@ -1,27 +1,24 @@
 import sys
-# import logging
 import itertools as it
 import functools as ft
 from argparse import ArgumentParser
 from dataclasses import dataclass
 
-from shapely import Point, Polygon
+from shapely import Point, Polygon, LineString, MultiLineString
+from shapely.ops import linemerge
 
 @dataclass(frozen=True)
 class Step:
     direction: Point
     length: int
 
-    @ft.singledispatchmethod
-    def __add__(self, other):
-        raise TypeError(type(other))
+    def advance(self, point):
+        coords = []
+        for ((u, *_), (v, *_)) in zip(point.xy, self.direction.xy):
+            magnitude = u + (v * self.length)
+            coords.append(magnitude)
 
-    @__add__.register
-    def _(self, other: Point):
-        iterable = zip(other.xy, self.direction.xy)
-        args = (x[0] + y[0] * self.length for (x, y) in iterable)
-
-        return Point(*args)
+        return Point(*coords)
 
 #
 #
@@ -68,15 +65,37 @@ class SwappedMapReader(MapReader):
 #
 def dig(instructions, pt):
     for step in instructions:
-        pt = step + pt
+        pt = step.advance(pt)
         yield pt
+        # for i in it.repeat(step.direction, step.length):
+        #     pt = Point(pt.x + i.x, pt.y + i.y)
+        #     yield pt
+
+@ft.singledispatch
+def parts(shape):
+    raise TypeError(type(shape))
+
+@parts.register
+def _(shape: LineString):
+    return 1
+
+@parts.register
+def _(shape: MultiLineString):
+    linemerge(shape)
+
 
 def area(polygon):
-    (x1, y1, x2, y2) = map(int, polygon.bounds)
-    iterable = (range(x, y + 1) for (x, y) in ((x1, x2), (y1, y2)))
+    (min_x, min_y, max_x, max_y) = map(int, polygon.bounds)
 
-    for (r, c) in it.product(*iterable):
-        yield polygon.intersects(Point(r, c))
+    for x in range(min_x, max_x + 1):
+        line = LineString([ (x, y) for y in (min_y, max_y) ])
+        overlap = line.intersection(polygon)
+        try:
+            additional = len(linemerge(overlap).geoms)
+        except (AttributeError, ValueError):
+            additional = 1
+
+        yield overlap.length + additional
 
 if __name__ == '__main__':
     arguments = ArgumentParser()
