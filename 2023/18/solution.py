@@ -1,10 +1,8 @@
 import sys
 import itertools as it
-import functools as ft
 from argparse import ArgumentParser
 from dataclasses import dataclass
-
-from shapely import Point, Polygon, LineString, MultiLineString
+from shapely import Point, Polygon, LineString
 from shapely.ops import linemerge
 
 @dataclass(frozen=True)
@@ -40,7 +38,7 @@ class MapReader:
 
             yield Step(d, l)
 
-    def direction(self, d, l, c):
+    def parse(self, d, l, c):
         raise NotImplementedError()
 
 class StandardMapReader(MapReader):
@@ -67,22 +65,6 @@ def dig(instructions, pt):
     for step in instructions:
         pt = step.advance(pt)
         yield pt
-        # for i in it.repeat(step.direction, step.length):
-        #     pt = Point(pt.x + i.x, pt.y + i.y)
-        #     yield pt
-
-@ft.singledispatch
-def parts(shape):
-    raise TypeError(type(shape))
-
-@parts.register
-def _(shape: LineString):
-    return 1
-
-@parts.register
-def _(shape: MultiLineString):
-    linemerge(shape)
-
 
 def area(polygon):
     (min_x, min_y, max_x, max_y) = map(int, polygon.bounds)
