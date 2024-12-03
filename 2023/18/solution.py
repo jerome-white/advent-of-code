@@ -44,7 +44,6 @@ class Boundary:
             args = ((x, y) for y in (self.min_y, self.max_y))
             yield LineString(args)
 
-
     def __call__(self, size):
         min_x = self.min_x
         max_x = min_x + size
@@ -53,8 +52,6 @@ class Boundary:
             yield replace(self, min_x=min_x, max_x=max_x)
             min_x = max_x + 1
             max_x = min(self.max_x, max_x + size)
-
-
 
 #
 #
@@ -99,11 +96,6 @@ class SwappedMapReader(MapReader):
 #
 #
 #
-def dig(instructions, pt):
-    for step in instructions:
-        pt = step.advance(pt)
-        yield pt
-
 def func(incoming, outgoing, polygon):
     while True:
         boundary = incoming.get()
@@ -118,12 +110,19 @@ def func(incoming, outgoing, polygon):
             except (AttributeError, ValueError):
                 edges = 1
             size += overlap.length + edges
+        assert size.is_integer()
 
-        outgoing.put(size)
+        outgoing.put(int(size))
+
+def dig(instructions, pt):
+    for step in instructions:
+        pt = step.advance(pt)
+        yield pt
 
 def build(reader):
     start = Point(0, 0)
     iterable = dig(reader, start)
+
     return Polygon(it.chain([start], iterable))
 
 def area(polygon, args):
@@ -149,6 +148,9 @@ def area(polygon, args):
             size = incoming.get()
             yield size
 
+#
+#
+#
 if __name__ == '__main__':
     arguments = ArgumentParser()
     arguments.add_argument('--version', type=int, default=1, choices=(1, 2))
